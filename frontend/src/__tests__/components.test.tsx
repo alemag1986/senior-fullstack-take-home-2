@@ -271,4 +271,43 @@ describe('UI Components', () => {
       expect(await screen.findByText('Grammar & Syntax')).toBeInTheDocument();
     });
   });
+
+  describe('Pencil Favicon', () => {
+    it('verifies favicon.svg exists and matches the editor style and themes', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+
+      const faviconSvgPath = path.resolve(__dirname, '../../public/favicon.svg');
+      expect(fs.existsSync(faviconSvgPath)).toBe(true);
+
+      const svgContent = fs.readFileSync(faviconSvgPath, 'utf-8');
+      expect(svgContent).toContain('<svg');
+      // Verifies pencil geometry
+      expect(svgContent).toContain('M21.174 6.812');
+      // Verifies cyan writing accent line (#00a8ff matching caret)
+      expect(svgContent).toContain('#00a8ff');
+      // Verifies theme matching (light zinc #18181b and dark zinc #f4f4f5)
+      expect(svgContent).toContain('#18181b');
+      expect(svgContent).toContain('#f4f4f5');
+      expect(svgContent).toContain('prefers-color-scheme: dark');
+
+      // Verifies index.html links to favicon.svg
+      const indexPath = path.resolve(__dirname, '../../index.html');
+      const indexContent = fs.readFileSync(indexPath, 'utf-8');
+      expect(indexContent).toContain('href="/favicon.svg"');
+    });
+
+    it('verifies fallback favicon.ico is valid', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+
+      const faviconIcoPath = path.resolve(__dirname, '../../public/favicon.ico');
+      expect(fs.existsSync(faviconIcoPath)).toBe(true);
+
+      const icoBuffer = fs.readFileSync(faviconIcoPath);
+      // ICO header check: reserved=0, type=1 (ICO)
+      expect(icoBuffer.readUInt16LE(0)).toBe(0);
+      expect(icoBuffer.readUInt16LE(2)).toBe(1);
+    });
+  });
 });
