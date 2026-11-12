@@ -7,6 +7,7 @@ interface HistoryModalProps {
   currentEntryId: string;
   onSelectEntry: (entry: JournalEntry) => void;
   onNewEntry: () => void;
+  onRefresh?: () => void;
   onClose: () => void;
 }
 
@@ -15,6 +16,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
   currentEntryId,
   onSelectEntry,
   onNewEntry,
+  onRefresh,
   onClose,
 }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -56,6 +58,17 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
           <p className="text-xs text-zinc-400">Sorted newer to older</p>
         </div>
         <div className="flex items-center gap-2">
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              data-testid="refresh-history-button"
+              className="px-2.5 py-1 text-xs font-medium rounded-md border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 transition-colors"
+              title="Refresh journals from server and sync storage"
+            >
+              ↻ Refresh
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {

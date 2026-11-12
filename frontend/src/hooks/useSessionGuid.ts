@@ -28,9 +28,12 @@ export function useSessionGuid() {
 
   const updateSessionGuid = (newGuid: string): boolean => {
     const trimmed = newGuid.trim();
-    // Validate UUID format
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(trimmed)) {
+    if (!trimmed) {
+      return false;
+    }
+    // Accept standard UUID or alphanumeric user identifier strings
+    const validIdentifierRegex = /^([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-zA-Z0-9_.-]{1,64})$/i;
+    if (!validIdentifierRegex.test(trimmed)) {
       return false;
     }
     localStorage.setItem(STORAGE_KEY, trimmed);
@@ -38,10 +41,11 @@ export function useSessionGuid() {
     return true;
   };
 
-  const regenerateGuid = () => {
+  const regenerateGuid = (): string => {
     const fresh = generateGuid();
     localStorage.setItem(STORAGE_KEY, fresh);
     setSessionGuid(fresh);
+    return fresh;
   };
 
   return {

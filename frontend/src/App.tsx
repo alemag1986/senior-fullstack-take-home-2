@@ -16,7 +16,7 @@ import { useTheme } from './hooks/useTheme';
 import { JournalEntry } from './types/journal';
 
 export const App: React.FC = () => {
-  const { sessionGuid, updateSessionGuid } = useSessionGuid();
+  const { sessionGuid, updateSessionGuid, regenerateGuid } = useSessionGuid();
   const { theme, setTheme } = useTheme();
 
   // Create API client with current session GUID
@@ -53,39 +53,56 @@ export const App: React.FC = () => {
   const [isCompareOpen, setIsCompareOpen] = useState(false);
   const [isInsightsOpen, setIsInsightsOpen] = useState(false);
 
-  // Sync entries from backend DB
-  useEffect(() => {
-    let isMounted = true;
-    apiClient.fetchEntries().then((remoteEntries) => {
-      if (isMounted && remoteEntries && remoteEntries.length > 0) {
-        setEntriesHistory((prev) => {
-          const map = new Map<string, JournalEntry>();
-          prev.forEach((e) => map.set(e.id, e));
-          remoteEntries.forEach((e) => map.set(e.id, e));
-          const merged = Array.from(map.values());
-          localStorage.setItem(`journal_history_${sessionGuid}`, JSON.stringify(merged));
-          return merged;
-        });
+  // Sync entries from backend DB and local web storage
+  const syncJournals = useCallback(async (guid = sessionGuid) => {
+    try {
+      // 1. Immediately reflect web storage for this user to ensure instant responsiveness
+      let localEntries: JournalEntry[] = [];
+      try {
+        const stored = localStorage.getItem(`journal_history_${guid}`);
+        if (stored) localEntries = JSON.parse(stored);
+      } catch {
+        localEntries = [];
       }
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, [apiClient, sessionGuid]);
+      setEntriesHistory(localEntries);
+
+      // 2. Fetch remote entries from backend for this user
+      const client = new JournalApiClient(guid);
+      const remoteEntries = await client.fetchEntries();
+
+      // 3. Merge remote entries with local entries (remote entries take precedence)
+      const map = new Map<string, JournalEntry>();
+      localEntries.forEach((e) => map.set(e.id, e));
+      if (Array.isArray(remoteEntries)) {
+        remoteEntries.forEach((e) => map.set(e.id, e));
+      }
+
+      const merged = Array.from(map.values());
+      // 4. Sync back to web storage
+      localStorage.setItem(`journal_history_${guid}`, JSON.stringify(merged));
+      setEntriesHistory(merged);
+      return merged;
+    } catch (err) {
+      console.error('Failed to sync journals:', err);
+      try {
+        const stored = localStorage.getItem(`journal_history_${guid}`);
+        const local = stored ? JSON.parse(stored) : [];
+        setEntriesHistory(local);
+        return local;
+      } catch {
+        setEntriesHistory([]);
+        return [];
+      }
+    }
+  }, [sessionGuid]);
+
+  // Sync journals on mount and whenever user / sessionGuid changes
+  useEffect(() => {
+    syncJournals(sessionGuid);
+  }, [syncJournals, sessionGuid]);
 
   // Auto-Save Draft
   const { isDirty, restoreDraft } = useAutoSave(entry, sessionGuid);
-
-  // Restore draft on mount if exists
-  useEffect(() => {
-    const savedDraft = restoreDraft();
-    if (savedDraft && savedDraft.content) {
-      setEntry((prev) => ({
-        ...prev,
-        ...savedDraft,
-      }));
-    }
-  }, [sessionGuid]);
 
   // Language auto-detection
   const {
@@ -102,6 +119,39 @@ export const App: React.FC = () => {
     activateNativeDetector,
     supportedLanguages,
   } = useLanguageDetector(entry.targetLanguage, entry.content);
+
+  // Restore draft or reset to clean entry when user changes
+  useEffect(() => {
+    const savedDraft = restoreDraft(sessionGuid);
+    if (savedDraft && savedDraft.content) {
+      setEntry((prev) => ({
+        ...prev,
+        ...savedDraft,
+      }));
+    } else {
+      setEntry({
+        id: `entry-${Date.now()}`,
+        title: 'New Journal Entry',
+        targetLanguage: activeLanguageCode,
+        content: '',
+        revision: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  }, [sessionGuid]);
+
+  const handleUpdateSessionGuid = useCallback(
+    (newGuid: string) => {
+      const valid = updateSessionGuid(newGuid);
+      return valid;
+    },
+    [updateSessionGuid]
+  );
+
+  const handleRefreshUser = useCallback(() => {
+    regenerateGuid();
+  }, [regenerateGuid]);
 
   // Sync language with entry
   useEffect(() => {
@@ -176,7 +226,15 @@ export const App: React.FC = () => {
     setIsLoading(true);
     const result = await apiClient.analyze(entry);
     applyAnalysis(result, entry);
-  }, [entry, isLoading, apiClient, applyAnalysis, setIsLoading]);
+
+    // Sync analyzed entry to local history and web storage
+    setEntriesHistory((prev) => {
+      const filtered = prev.filter((e) => e.id !== entry.id);
+      const updated = [{ ...entry, updatedAt: new Date().toISOString() }, ...filtered];
+      localStorage.setItem(`journal_history_${sessionGuid}`, JSON.stringify(updated));
+      return updated;
+    });
+  }, [entry, isLoading, apiClient, applyAnalysis, setIsLoading, sessionGuid]);
 
   // Action: Create New Blank Entry
   const handleNewEntry = useCallback(() => {
@@ -284,6 +342,7 @@ export const App: React.FC = () => {
           currentEntryId={entry.id}
           onSelectEntry={handleSelectEntry}
           onNewEntry={handleNewEntry}
+          onRefresh={() => syncJournals(sessionGuid)}
           onClose={() => setIsHistoryOpen(false)}
         />
       )}
@@ -307,7 +366,8 @@ export const App: React.FC = () => {
           onSelectLanguage={selectLanguage}
           onResetAutoDetect={resetToAutoDetect}
           sessionGuid={sessionGuid}
-          onUpdateSessionGuid={updateSessionGuid}
+          onUpdateSessionGuid={handleUpdateSessionGuid}
+          onRefreshUser={handleRefreshUser}
           onClose={() => setIsSettingsOpen(false)}
         />
       )}

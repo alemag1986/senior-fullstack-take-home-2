@@ -19,6 +19,7 @@ interface ThemeModalProps {
   onResetAutoDetect: () => void;
   sessionGuid: string;
   onUpdateSessionGuid: (guid: string) => boolean;
+  onRefreshUser?: () => void;
   onClose: () => void;
 }
 
@@ -38,6 +39,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
   onResetAutoDetect,
   sessionGuid,
   onUpdateSessionGuid,
+  onRefreshUser,
   onClose,
 }) => {
   const [copied, setCopied] = useState(false);
@@ -59,9 +61,10 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
     const valid = onUpdateSessionGuid(customGuid);
     if (valid) {
       setGuidSuccess(true);
+      setCustomGuid('');
       setTimeout(() => setGuidSuccess(false), 2500);
     } else {
-      setGuidError('Invalid UUID format. Expected format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx');
+      setGuidError('Invalid format. Expected UUID or valid user identifier.');
     }
   };
 
@@ -207,10 +210,10 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
         {/* 3. Session GUID & Traceability */}
         <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800">
           <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
-            Browser Session GUID (Traceability)
+            Browser User / Session ID (Traceability)
           </label>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3 leading-relaxed">
-            Unique identifier stored in browser data for session traceability. You can copy it to back up your session or paste an existing GUID to restore a previous session.
+            Unique identifier stored in browser data for session traceability. You can refresh or switch user to retrieve and sync journals from storage and the server.
           </p>
 
           <div className="flex items-center gap-2 mb-3">
@@ -228,6 +231,17 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
             >
               {copied ? 'Copied!' : 'Copy'}
             </button>
+            {onRefreshUser && (
+              <button
+                type="button"
+                onClick={onRefreshUser}
+                data-testid="refresh-user-button"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                title="Generate fresh session GUID for a new user"
+              >
+                Refresh User
+              </button>
+            )}
           </div>
 
           {/* Form to enter / restore existing GUID */}
@@ -235,23 +249,25 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
             <div className="flex items-center gap-2">
               <input
                 type="text"
-                placeholder="Paste an existing GUID to restore..."
+                placeholder="Paste or enter user ID to switch..."
                 value={customGuid}
                 onChange={(e) => setCustomGuid(e.target.value)}
+                data-testid="change-user-input"
                 className="flex-1 px-3 py-1.5 font-mono text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-transparent text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
               />
               <button
                 type="submit"
+                data-testid="change-user-submit"
                 className="px-3 py-1.5 text-xs font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:opacity-90"
               >
-                Restore
+                Switch User
               </button>
             </div>
             {guidError && (
               <p className="text-[11px] text-rose-500 mt-0.5">{guidError}</p>
             )}
             {guidSuccess && (
-              <p className="text-[11px] text-emerald-500 mt-0.5">Session GUID updated successfully!</p>
+              <p className="text-[11px] text-emerald-500 mt-0.5">User switched & journals synced successfully!</p>
             )}
           </form>
         </div>
