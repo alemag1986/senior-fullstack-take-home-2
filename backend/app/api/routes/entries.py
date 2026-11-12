@@ -16,7 +16,10 @@ from backend.app.models.schemas import (
     SuggestionExplanation,
     SuggestionResponse,
 )
-from backend.app.services.ai_service import analyze_journal_text
+from backend.app.services.ai_service import (
+    analyze_journal_text,
+    get_active_model_version,
+)
 from backend.app.services.journal_service import (
     get_entry,
     list_entries,
@@ -87,6 +90,7 @@ def analyze_entry(
 
     analysis_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
+    active_model = get_active_model_version()
 
     conn.execute("BEGIN IMMEDIATE;")
     try:
@@ -106,7 +110,7 @@ def analyze_entry(
                 status.value,
                 OffsetEncoding.UTF_16.value,
                 "1.0.0",
-                settings.GEMINI_MODEL if settings.GEMINI_API_KEY else "heuristic-v1",
+                active_model,
                 "v1",
                 error_code,
                 now,
@@ -183,7 +187,7 @@ def analyze_entry(
         status=status,
         offsetEncoding=OffsetEncoding.UTF_16,
         taxonomyVersion="1.0.0",
-        modelVersion=settings.GEMINI_MODEL if settings.GEMINI_API_KEY else "heuristic-v1",
+        modelVersion=active_model,
         promptVersion="v1",
         errorCode=error_code,
         createdAt=now,

@@ -69,9 +69,13 @@ export const BlankCanvas: React.FC<BlankCanvasProps> = ({
     }
   };
 
-  const selectedSuggestion = activeSuggestions.find((s) => s.id === selectedSuggestionId && s.state === 'pending');
+  const pendingSuggestions = activeSuggestions.filter((s) => s.state === 'pending');
+  const selectedSuggestion = pendingSuggestions.find((s) => s.id === selectedSuggestionId);
+  const selectedIndex = selectedSuggestion
+    ? pendingSuggestions.findIndex((s) => s.id === selectedSuggestion.id)
+    : -1;
 
-  const hasDecorations = activeSuggestions.some((s) => s.state === 'pending') && !isStale;
+  const hasDecorations = pendingSuggestions.length > 0 && !isStale;
 
   return (
     <div className="relative w-full max-w-2xl mx-auto min-h-[calc(100vh-120px)] pt-12 pb-32 px-6">
@@ -79,11 +83,17 @@ export const BlankCanvas: React.FC<BlankCanvasProps> = ({
       <div className="relative font-mono text-lg leading-[1.75] tracking-tight">
         {/* If we have active suggestions, render the decoration view alongside textarea */}
         {hasDecorations ? (
-          <div className="relative">
+          <div className="relative min-h-[calc(100vh-160px)]">
             {/* Interactive Decorations Layer */}
             <div
               data-testid="decorated-canvas"
-              className="w-full whitespace-pre-wrap select-text text-zinc-800 dark:text-zinc-200"
+              onClick={(e) => {
+                // Focus hidden textarea when clicking on background/plain text
+                if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'SPAN') {
+                  textareaRef.current?.focus();
+                }
+              }}
+              className="relative z-10 w-full min-h-[calc(100vh-160px)] whitespace-pre-wrap select-text text-zinc-900 dark:text-zinc-100 cursor-text"
             >
               <InlineDecorations
                 text={content}
@@ -103,7 +113,7 @@ export const BlankCanvas: React.FC<BlankCanvasProps> = ({
               spellCheck={false}
               autoCapitalize="off"
               autoComplete="off"
-              className="absolute inset-0 w-full h-full opacity-0 cursor-text resize-none p-0 border-none outline-none focus:ring-0"
+              className="absolute inset-0 z-0 w-full h-full opacity-0 cursor-text resize-none p-0 border-none outline-none focus:ring-0"
               placeholder="Start writing in your target language..."
             />
           </div>
@@ -129,6 +139,8 @@ export const BlankCanvas: React.FC<BlankCanvasProps> = ({
         <SuggestionPopover
           suggestion={selectedSuggestion}
           anchorRect={popoverAnchor}
+          currentIndex={selectedIndex}
+          totalCount={pendingSuggestions.length}
           onAccept={(id) => {
             onAcceptSuggestion(id);
             setPopoverAnchor(null);

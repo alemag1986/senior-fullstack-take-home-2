@@ -62,6 +62,43 @@ describe('UI Components', () => {
       fireEvent.click(mark);
       expect(onSelect).toHaveBeenCalledWith('sug-1');
     });
+
+    it('renders popover dialog to fix or accept suggestions when a suggestion is selected', () => {
+      const suggestion: ActiveSuggestion = {
+        id: 'sug-1',
+        category: 'spelling_accents',
+        kind: 'correction',
+        ruleCode: 'SPELL',
+        state: 'pending',
+        activeRange: { start: 5, end: 10 },
+        edit: { start: 5, end: 10, original: 'mundo', replacement: 'planeta' },
+        explanation: { title: 'Spelling correction', message: 'Use planeta instead.' },
+      };
+
+      const onAccept = vi.fn();
+      const onDismiss = vi.fn();
+
+      render(
+        <BlankCanvas
+          content="Hola mundo"
+          activeSuggestions={[suggestion]}
+          selectedSuggestionId="sug-1"
+          onChange={vi.fn()}
+          onSelectSuggestion={vi.fn()}
+          onAcceptSuggestion={onAccept}
+          onDismissSuggestion={onDismiss}
+        />
+      );
+
+      const popover = screen.getByTestId('suggestion-popover');
+      expect(popover).toBeInTheDocument();
+      expect(screen.getByText('Spelling correction')).toBeInTheDocument();
+      expect(screen.getByText('planeta')).toBeInTheDocument();
+
+      const acceptBtn = screen.getByRole('button', { name: /accept/i });
+      fireEvent.click(acceptBtn);
+      expect(onAccept).toHaveBeenCalledWith('sug-1');
+    });
   });
 
   describe('SuggestionPopover', () => {

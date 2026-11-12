@@ -50,7 +50,7 @@ export function useSuggestions(
     }));
 
     setActiveSuggestions(initialActive);
-    setSelectedSuggestionId(null);
+    setSelectedSuggestionId(initialActive[0]?.id || null);
     return true;
   };
 
@@ -67,7 +67,10 @@ export function useSuggestions(
     }
 
     setActiveSuggestions(result.updatedSuggestions);
-    setSelectedSuggestionId(null);
+    const nextPending = result.updatedSuggestions.find(
+      (s) => s.state === 'pending' && s.id !== id
+    );
+    setSelectedSuggestionId(nextPending ? nextPending.id : null);
     // Increment local entry revision and update text
     onUpdateContent(result.newText, entry.revision + 1);
   };
@@ -77,11 +80,15 @@ export function useSuggestions(
    * Underline is removed, but text remains untouched.
    */
   const dismissSuggestion = (id: string) => {
-    setActiveSuggestions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, state: 'dismissed' } : s))
+    const updated = activeSuggestions.map((s) =>
+      s.id === id ? { ...s, state: 'dismissed' as const } : s
     );
+    setActiveSuggestions(updated);
     if (selectedSuggestionId === id) {
-      setSelectedSuggestionId(null);
+      const nextPending = updated.find(
+        (s) => s.state === 'pending' && s.id !== id
+      );
+      setSelectedSuggestionId(nextPending ? nextPending.id : null);
     }
   };
 

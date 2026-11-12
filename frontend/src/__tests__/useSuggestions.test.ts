@@ -47,7 +47,53 @@ describe('useSuggestions hook', () => {
 
     expect(result.current.activeSuggestions.length).toBe(1);
     expect(result.current.activeSuggestions[0].state).toBe('pending');
+    expect(result.current.selectedSuggestionId).toBe('sug-1');
     expect(result.current.isStale).toBe(false);
+  });
+
+  it('automatically advances selectedSuggestionId to next pending suggestion on accept and dismiss', () => {
+    const multiAnalysis: Analysis = {
+      ...sampleAnalysis,
+      suggestions: [
+        sampleAnalysis.suggestions[0],
+        {
+          id: 'sug-2',
+          category: 'grammar_syntax',
+          kind: 'correction',
+          ruleCode: 'GRAM_1',
+          edit: {
+            start: 0,
+            end: 3,
+            original: 'Hoy',
+            replacement: 'Ayer',
+          },
+          explanation: { title: 'Grammar', message: 'Past context' },
+        },
+      ],
+    };
+
+    const onUpdateContent = vi.fn();
+    const { result } = renderHook(() => useSuggestions(initialEntry, onUpdateContent));
+
+    act(() => {
+      result.current.applyAnalysis(multiAnalysis, initialEntry);
+    });
+
+    expect(result.current.selectedSuggestionId).toBe('sug-1');
+
+    // Dismiss first suggestion -> advances to sug-2
+    act(() => {
+      result.current.dismissSuggestion('sug-1');
+    });
+
+    expect(result.current.selectedSuggestionId).toBe('sug-2');
+
+    // Accept sug-2 -> advances to null because no pending left
+    act(() => {
+      result.current.acceptSuggestion('sug-2');
+    });
+
+    expect(result.current.selectedSuggestionId).toBeNull();
   });
 
   it('discards delayed responses that do not match current revision or text', () => {
