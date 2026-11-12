@@ -6,6 +6,7 @@ import { VersionCompare } from './components/Compare/VersionCompare';
 import { HistoryModal } from './components/Modals/HistoryModal';
 import { ThemeModal } from './components/Modals/ThemeModal';
 import { HelpModal } from './components/Modals/HelpModal';
+import { InsightsModal } from './components/Modals/InsightsModal';
 import { useAutoSave } from './hooks/useAutoSave';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useLanguageDetector } from './hooks/useLanguageDetector';
@@ -50,6 +51,27 @@ export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isCompareOpen, setIsCompareOpen] = useState(false);
+  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
+
+  // Sync entries from backend DB
+  useEffect(() => {
+    let isMounted = true;
+    apiClient.fetchEntries().then((remoteEntries) => {
+      if (isMounted && remoteEntries && remoteEntries.length > 0) {
+        setEntriesHistory((prev) => {
+          const map = new Map<string, JournalEntry>();
+          prev.forEach((e) => map.set(e.id, e));
+          remoteEntries.forEach((e) => map.set(e.id, e));
+          const merged = Array.from(map.values());
+          localStorage.setItem(`journal_history_${sessionGuid}`, JSON.stringify(merged));
+          return merged;
+        });
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [apiClient, sessionGuid]);
 
   // Auto-Save Draft
   const { isDirty, restoreDraft } = useAutoSave(entry, sessionGuid);
@@ -123,6 +145,17 @@ export const App: React.FC = () => {
     }));
   };
 
+  // Synchronize decisions to backend for mistake tracking
+  const handleAcceptSuggestion = (id: string) => {
+    acceptSuggestion(id);
+    apiClient.submitDecision(entry.id, entry.revision, id, 'accepted');
+  };
+
+  const handleDismissSuggestion = (id: string) => {
+    dismissSuggestion(id);
+    apiClient.submitDecision(entry.id, entry.revision, id, 'dismissed');
+  };
+
   // Action: Save Entry (Ctrl+S / Cmd+S)
   const handleSave = useCallback(async () => {
     if (!entry.content.trim()) return;
@@ -167,7 +200,8 @@ export const App: React.FC = () => {
   }, [setSelectedSuggestionId]);
 
   // Global Keyboard Shortcuts
-  const anyModalOpen = isHistoryOpen || isSettingsOpen || isHelpOpen || isCompareOpen;
+  const anyModalOpen =
+    isHistoryOpen || isSettingsOpen || isHelpOpen || isCompareOpen || isInsightsOpen;
 
   useKeyboardShortcuts({
     onSave: handleSave,
@@ -175,6 +209,7 @@ export const App: React.FC = () => {
     onOpenHistory: () => setIsHistoryOpen(true),
     onOpenSettings: () => setIsSettingsOpen(true),
     onOpenHelp: () => setIsHelpOpen(true),
+    onOpenInsights: () => setIsInsightsOpen(true),
     onToggleCompare: () => {
       if (!isStale && activeSuggestions.length > 0) {
         setIsCompareOpen((prev) => !prev);
@@ -186,6 +221,7 @@ export const App: React.FC = () => {
         setIsSettingsOpen(false);
         setIsHelpOpen(false);
         setIsCompareOpen(false);
+        setIsInsightsOpen(false);
       } else if (selectedSuggestionId) {
         setSelectedSuggestionId(null);
       }
@@ -210,8 +246,8 @@ export const App: React.FC = () => {
         selectedSuggestionId={selectedSuggestionId}
         onChange={handleEditorChange}
         onSelectSuggestion={setSelectedSuggestionId}
-        onAcceptSuggestion={acceptSuggestion}
-        onDismissSuggestion={dismissSuggestion}
+        onAcceptSuggestion={handleAcceptSuggestion}
+        onDismissSuggestion={handleDismissSuggestion}
         isStale={isStale}
       />
 
@@ -227,6 +263,7 @@ export const App: React.FC = () => {
         isMock={analysis?.isMock}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenHelp={() => setIsHelpOpen(true)}
+        onOpenInsights={() => setIsInsightsOpen(true)}
         onReview={handleReview}
       />
 
@@ -275,7 +312,15 @@ export const App: React.FC = () => {
         />
       )}
 
-      {/* 6. Help Modal (Ctrl+/ / ?) */}
+      {/* 6. Learning Insights Modal (Ctrl+I) */}
+      {isInsightsOpen && (
+        <InsightsModal
+          apiClient={apiClient}
+          onClose={() => setIsInsightsOpen(false)}
+        />
+      )}
+
+      {/* 7. Help Modal (Ctrl+/ / ?) */}
       {isHelpOpen && <HelpModal onClose={() => setIsHelpOpen(false)} />}
     </main>
   );

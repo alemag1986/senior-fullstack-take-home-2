@@ -12,6 +12,7 @@ interface StatusIndicatorProps {
   isMock?: boolean;
   onOpenSettings: () => void;
   onOpenHelp: () => void;
+  onOpenInsights?: () => void;
   onReview: () => void;
 }
 
@@ -26,6 +27,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   isMock,
   onOpenSettings,
   onOpenHelp,
+  onOpenInsights,
   onReview,
 }) => {
   const [isVisible, setIsVisible] = useState(true);
@@ -140,6 +142,21 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
         <span className={isDirty ? 'text-amber-500' : 'text-zinc-400'}>
           {isDirty ? 'Unsaved' : 'Saved'}
         </span>
+
+        {/* Insights button */}
+        {onOpenInsights && (
+          <>
+            <span className="text-zinc-300 dark:text-zinc-700">•</span>
+            <button
+              type="button"
+              onClick={onOpenInsights}
+              className="hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors font-medium hover:underline"
+              title="Learning Insights & Mistake Trends (Ctrl+I)"
+            >
+              Insights
+            </button>
+          </>
+        )}
 
         <span className="text-zinc-300 dark:text-zinc-700">•</span>
 

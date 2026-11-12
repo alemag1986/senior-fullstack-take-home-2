@@ -103,4 +103,40 @@ export class JournalApiClient {
       return [];
     }
   }
+
+  async submitDecision(
+    entryId: string,
+    expectedRevision: number,
+    suggestionId: string,
+    action: 'accepted' | 'dismissed'
+  ): Promise<void> {
+    try {
+      const response = await fetch(`${API_BASE}/entries/${entryId}/decisions`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          expectedRevision,
+          requestId: `req-${suggestionId}-${Date.now()}`,
+          decisions: [{ suggestionId, action }],
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Decision submit failed: ${response.status}`);
+      }
+    } catch {
+      // Graceful offline fallback
+    }
+  }
+
+  async fetchInsights(): Promise<import('../types/journal').InsightsData | null> {
+    try {
+      const response = await fetch(`${API_BASE}/insights`, {
+        headers: this.getHeaders(),
+      });
+      if (!response.ok) throw new Error('Insights fetch failed');
+      return await response.json();
+    } catch {
+      return null;
+    }
+  }
 }

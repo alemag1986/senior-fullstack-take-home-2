@@ -59,3 +59,34 @@ export interface DiffPart {
   type: 'equal' | 'delete' | 'insert';
   value: string;
 }
+
+export interface CategoryStat {
+  category: FeedbackCategory;
+  count: number;
+  percentage: number;
+}
+
+export interface MistakePattern {
+  ruleCode: string;
+  category: FeedbackCategory;
+  count: number;
+  sampleExplanation: string;
+}
+
+export interface TrendPoint {
+  date: string;
+  entriesCount: number;
+  mistakesCount: number;
+}
+
+export interface InsightsData {
+  totalEntries: number;
+  totalWords: number;
+  totalSuggestions: number;
+  acceptedDecisions: number;
+  dismissedDecisions: number;
+  pendingDecisions: number;
+  categoryBreakdown: CategoryStat[];
+  topMistakes: MistakePattern[];
+  recentTrends: TrendPoint[];
+}

@@ -198,4 +198,40 @@ describe('UI Components', () => {
       expect(onSetTheme).toHaveBeenCalledWith('dark');
     });
   });
+
+  describe('InsightsModal', () => {
+    it('renders loading and then displays aggregated insights', async () => {
+      const mockClient = {
+        fetchInsights: vi.fn().mockResolvedValue({
+          totalEntries: 5,
+          totalWords: 120,
+          totalSuggestions: 8,
+          acceptedDecisions: 4,
+          dismissedDecisions: 2,
+          pendingDecisions: 2,
+          categoryBreakdown: [
+            { category: 'grammar_syntax', count: 5, percentage: 62.5 },
+            { category: 'spelling_accents', count: 3, percentage: 37.5 },
+          ],
+          topMistakes: [
+            {
+              ruleCode: 'grammar.verb_tense',
+              category: 'grammar_syntax',
+              count: 3,
+              sampleExplanation: 'Verb conjugation error',
+            },
+          ],
+          recentTrends: [{ date: '2026-11-12', entriesCount: 2, mistakesCount: 3 }],
+        }),
+      } as any;
+
+      const { InsightsModal } = await import('../components/Modals/InsightsModal');
+      render(<InsightsModal apiClient={mockClient} onClose={vi.fn()} />);
+
+      expect(await screen.findByText('Learning Insights')).toBeInTheDocument();
+      expect(await screen.findByText('120')).toBeInTheDocument();
+      expect(await screen.findByText('Verb conjugation error')).toBeInTheDocument();
+      expect(await screen.findByText('Grammar & Syntax')).toBeInTheDocument();
+    });
+  });
 });

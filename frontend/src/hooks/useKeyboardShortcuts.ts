@@ -6,6 +6,7 @@ export interface ShortcutHandlers {
   onOpenHistory?: () => void;
   onOpenSettings?: () => void;
   onOpenHelp?: () => void;
+  onOpenInsights?: () => void;
   onEscape?: () => void;
   onToggleCompare?: () => void;
 }
@@ -55,6 +56,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers, enabled = true)
       if ((e.ctrlKey && key === 'h') || (isMac && e.metaKey && key === 'o') || (e.altKey && key === 'h')) {
         e.preventDefault();
         handlers.onOpenHistory?.();
+        return;
+      }
+
+      // Insights: Ctrl+I or Cmd+I or Alt+I
+      if ((modifier && key === 'i') || (e.altKey && key === 'i')) {
+        e.preventDefault();
+        handlers.onOpenInsights?.();
         return;
       }
 
