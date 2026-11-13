@@ -14,7 +14,7 @@ import { useLanguageDetector } from './hooks/useLanguageDetector';
 import { useSessionGuid } from './hooks/useSessionGuid';
 import { useSuggestions } from './hooks/useSuggestions';
 import { useTheme } from './hooks/useTheme';
-import { JournalEntry } from './types/journal';
+import { ActiveSuggestion, JournalEntry } from './types/journal';
 
 export const App: React.FC = () => {
   const { sessionGuid, updateSessionGuid, regenerateGuid } = useSessionGuid();

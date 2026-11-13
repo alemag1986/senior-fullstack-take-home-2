@@ -37,39 +37,70 @@ npm --prefix frontend install
 
 ## 2. How to Run the Project
 
-### Running Both Together from Project Root
+### 2.1. Unified Production Mode (FastAPI Serving React SPA) [Recommended]
 
-Open two terminal windows at `/Users/ale/Projects/applied-computing`:
+In this mode, FastAPI acts as a single-port server serving both the compiled React frontend Single-Page Application (SPA) directly from `frontend/dist` and all backend REST endpoints (`/api/*`, `/health`, and `/docs`) on `http://localhost:8000/`. This eliminates CORS issues and port mismatches entirely.
 
-**Terminal 1 (Backend):**
-```bash
-source backend/.venv/bin/activate
-uvicorn backend.app.main:app --reload --port 8000
-```
+- **Step 1: Build the frontend static assets**
+  ```bash
+  # From project root:
+  npm --prefix frontend run build
+  # Or: cd frontend && npm run build
+  ```
 
-**Terminal 2 (Frontend):**
-```bash
-npm --prefix frontend run dev
-```
-*Frontend dev server starts at `http://localhost:5173`. Swagger docs at `http://localhost:8000/docs`.*
+- **Step 2: Start the FastAPI backend**
+  ```bash
+  # From project root:
+  source backend/.venv/bin/activate
+  uvicorn backend.app.main:app --port 8000
+  # Or with production Gunicorn worker:
+  # gunicorn -k uvicorn.workers.UvicornWorker backend.app.main:app --bind 0.0.0.0:8000
+  ```
+
+- **Step 3: Access the full application**
+  - **Web Application & UI**: Navigate to [http://localhost:8000/](http://localhost:8000/) (FastAPI serves both the SPA and the `/api/*` endpoints with zero CORS/port mismatch).
+  - **Health Check**: [http://localhost:8000/health](http://localhost:8000/health) (or `http://localhost:8000/api/health`)
+  - **Interactive API Docs (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---
 
-### Backend Execution Options
+### 2.2. Local Development (Vite HMR Hot-Reloading)
 
-#### Option 1: Run from Project Root (Recommended)
+For active UI development where you want Vite's instant Hot Module Replacement (HMR), run the backend and frontend development servers concurrently in two terminal windows:
+
+Open two terminal windows at `/Users/ale/Projects/applied-computing`:
+
+**Terminal 1 (Backend API):**
 ```bash
 source backend/.venv/bin/activate
 uvicorn backend.app.main:app --reload --port 8000
 ```
 
-#### Option 2: Run from Inside `backend/`
+**Terminal 2 (Frontend Dev Server with HMR):**
 ```bash
-cd backend
-source .venv/bin/activate
-PYTHONPATH=.. uvicorn backend.app.main:app --reload --port 8000
+npm --prefix frontend run dev
+# Or: cd frontend && npm run dev
 ```
-*(Setting `PYTHONPATH=..` includes the parent folder in Python's search path to resolve `backend` as top-level package).*
+
+*The frontend dev server runs at `http://localhost:5173` and proxies API requests to `http://localhost:8000`. Interactive API documentation is available at `http://localhost:8000/docs`.*
+
+---
+
+### 2.3. Additional Execution Options
+
+#### Backend Execution Options
+- **Option 1: From Project Root (Recommended)**
+  ```bash
+  source backend/.venv/bin/activate
+  uvicorn backend.app.main:app --reload --port 8000
+  ```
+- **Option 2: From Inside `backend/`**
+  ```bash
+  cd backend
+  source .venv/bin/activate
+  PYTHONPATH=.. uvicorn backend.app.main:app --reload --port 8000
+  ```
+  *(Setting `PYTHONPATH=..` includes the parent folder in Python's search path to resolve `backend` as top-level package).*
 
 #### Tip: Work Inside `backend/` Without `PYTHONPATH=..`
 Add a `.pth` file to the virtual environment once:
@@ -79,24 +110,79 @@ echo "/Users/ale/Projects/applied-computing" > backend/.venv/lib/python3.*/site-
 ```
 After this, Python resolves `backend.*` automatically from any directory with `.venv` active.
 
----
-
-### Frontend Execution Options
-
-#### Option 1: Run from Project Root (Recommended)
-```bash
-npm --prefix frontend run dev
-```
-
-#### Option 2: Run from Inside `frontend/`
-```bash
-cd frontend
-npm run dev
-```
+#### Frontend Execution Options
+- **From Project Root:** `npm --prefix frontend run dev`
+- **From Inside `frontend/`:** `cd frontend && npm run dev`
 
 ---
 
-## 3. Running Automated Tests
+## 3. Docker & Docker Compose Workflow
+
+You can build and run the entire unified application (FastAPI + compiled React SPA) inside a production-grade multi-stage container with persistent SQLite storage using a single command:
+
+```bash
+docker compose up --build
+```
+
+### What This Does:
+1. **Multi-Stage Docker Build**:
+   - **Stage 1 (`frontend-builder`)**: Compiles the React SPA with Node 20 into static production assets in `dist/`.
+   - **Stage 2 (`python-builder`)**: Pre-compiles Python dependencies into isolated wheels.
+   - **Stage 3 (`runtime`)**: Minimal Python 3.12 slim runtime with:
+     - Tini as PID 1 for signal forwarding and clean zombie reaping.
+     - Non-root `app` system user for secure container execution.
+     - Production Gunicorn managing 2 Uvicorn workers (`uvicorn.workers.UvicornWorker`).
+2. **Unified Single-Port Delivery**: Serves both the compiled React frontend and the `/api/*` endpoints on `http://localhost:8000`.
+3. **Persistent SQLite Database**: Mounts `./data:/data` from the host to persist the SQLite database (`/data/journal.db`) across container rebuilds and restarts.
+4. **Automated Healthcheck**: Docker continuously queries `http://localhost:8000/health` (HTTP 200 `{"status": "ok"}`).
+
+To run in the background (detached mode):
+```bash
+docker compose up -d --build
+```
+To stop the container:
+```bash
+docker compose down
+```
+
+---
+
+## 4. DigitalOcean App Platform Deployment
+
+Deploying the unified container to DigitalOcean App Platform takes only a few minutes using the root `Dockerfile`:
+
+### Step 1: Connect Repository
+1. In the [DigitalOcean Cloud Console](https://cloud.digitalocean.com/apps), click **Create App**.
+2. Select **GitHub** or **GitLab**, authorize access, and choose the repository and target branch (e.g. `main` or `dev`).
+3. App Platform automatically detects the repository's root `Dockerfile`.
+
+### Step 2: Configure Environment Variables
+Under **Environment Variables**, configure your AI provider and credentials:
+- `AI_PROVIDER`: `openrouter` (default) or `gemini`
+- `OPENROUTER_API_KEY`: Your OpenRouter API key (if using OpenRouter)
+- `GEMINI_API_KEY`: Your Google Gemini API key (if using Gemini)
+- `DATABASE_PATH`: Set to `/data/journal.db` (already default in container)
+
+### Step 3: Attach Persistent Storage (Critical for SQLite)
+Because App Platform containers run on an ephemeral filesystem, attach persistent block storage so your SQLite database persists across redeploys:
+1. Navigate to **Settings** -> **Components** -> Select your web service component.
+2. Scroll to **Attached Storage** and click **Add Storage**.
+3. Set the **Mount Path** to `/data`.
+4. Select storage capacity (e.g. 1 GB or 5 GB).
+5. Save changes.
+
+### Step 4: Health Check & HTTP Port Configuration
+- **HTTP Port**: Set to `8000` (auto-detected from `EXPOSE 8000` in the Dockerfile).
+- **Healthcheck Path**: The container exposes `/health` at the root. DigitalOcean App Platform automatically checks `http://localhost:8000/health` and marks the deployment healthy when it receives HTTP 200.
+
+### Step 5: Deploy & Verify
+Click **Review and Deploy**. Once the build finishes:
+- Your application is live at `https://<your-app-name>.ondigitalocean.app/`.
+- Both the React frontend SPA and all `/api/*` routes are served securely over HTTPS from the same domain with zero CORS setup required.
+
+---
+
+## 5. Running Automated Tests
 
 ### Backend Tests
 - **From project root:**
@@ -129,7 +215,7 @@ npm run dev
 
 ---
 
-## 4. Tool Description & Features
+## 6. Tool Description & Features
 
 ### Description
 AI-Assisted Language Journal is an intelligent writing assistant designed for foreign language acquisition. It captures student writing, passes text through an LLM analysis pipeline using controlled linguistic taxonomies, and generates structured inline feedback.
@@ -142,23 +228,35 @@ AI-Assisted Language Journal is an intelligent writing assistant designed for fo
 - **Optimistic Concurrency Control**: Entries maintain incrementing `revision` counters. Out-of-date updates yield `409 Conflict` to prevent overwriting edits.
 - **Stage 2 Learning Insights**: Aggregates mistake frequency, category breakdowns, common error rules, and writing activity trends over time.
 - **Session Isolation**: Supports multi-tenant user scoping via `X-Session-ID` header (defaults to `dev-user-default`).
+- **Unified Single-Port Delivery**: FastAPI serves the React SPA static build, handling client routing alongside `/api/*` endpoints and `/health` with zero CORS hurdles.
+- **Production Containerization**: Multi-stage Dockerfile with Tini supervisor, non-root user, Gunicorn workers, and persistent SQLite storage.
 
 ---
 
-## 5. Command Quick Reference
+## 7. Command Quick Reference
+
+### Full-Stack & Deployment Commands
+| Task | Command |
+| :--- | :--- |
+| **Build Frontend Static Assets** | `npm --prefix frontend run build` |
+| **Run Unified Mode (FastAPI + SPA)** | `source backend/.venv/bin/activate && uvicorn backend.app.main:app --port 8000` |
+| **Run Production Container** | `docker compose up --build` |
+| **Run Detached Container** | `docker compose up -d --build` |
+| **Stop Container** | `docker compose down` |
 
 ### Backend Commands (Inside `backend/`)
 | Task | Command |
 | :--- | :--- |
-| **Start Server** | `source .venv/bin/activate && PYTHONPATH=.. uvicorn backend.app.main:app --reload --port 8000` |
+| **Start Dev Server (Reload)** | `source .venv/bin/activate && PYTHONPATH=.. uvicorn app.main:app --reload --port 8000` |
 | **Run Migrations** | `PYTHONPATH=.. python3 db/migrate.py` |
 | **Run All Tests** | `PYTHONPATH=.. pytest tests/ -v` |
+| **Health Check Endpoint** | Navigate to `http://localhost:8000/health` |
 | **API Docs (Swagger)** | Navigate to `http://localhost:8000/docs` while server runs |
 
 ### Frontend Commands (Inside `frontend/`)
 | Task | Command |
 | :--- | :--- |
-| **Start Dev Server** | `npm run dev` (Runs on `http://localhost:5173`) |
+| **Start Dev Server (Vite HMR)** | `npm run dev` (Runs on `http://localhost:5173`) |
 | **Build for Production** | `npm run build` |
 | **Run Unit Tests** | `npm test` |
 | **Run Tests (Watch)** | `npm run test:watch` |
@@ -166,35 +264,41 @@ AI-Assisted Language Journal is an intelligent writing assistant designed for fo
 
 ---
 
-## 6. Architecture & Model Design
+## 8. Architecture & Model Design
 
 ### System Architecture
-The application uses a decoupled 3-tier architecture:
-- **Client (Frontend)**: React 18 SPA built with TypeScript, Vite, Tailwind CSS, and Lucide icons. Communicates with backend via REST.
-- **API & Analysis (Backend)**: FastAPI running on Python 3.11+. Manages business logic, revision checks, UTF-16 validation, and Gemini LLM prompts.
-- **Persistence (Database)**: SQLite file (`journal.db`) with Write-Ahead Logging (`WAL`), strict foreign keys, and indexes.
+The application uses a decoupled yet unified 3-tier architecture:
+- **Client (Frontend)**: React 18 SPA built with TypeScript, Vite, Tailwind CSS, and Lucide icons.
+- **API & Analysis (Backend)**: FastAPI running on Python 3.11+. In unified production mode, FastAPI serves static assets and handles SPA client-side fallback routes from `frontend/dist`, while managing business logic, concurrency control, UTF-16 validation, and AI analysis pipelines.
+- **Persistence (Database)**: SQLite file (`journal.db` or `/data/journal.db`) with Write-Ahead Logging (`WAL`), strict foreign keys, and indexes.
+- **Container Infrastructure**: Multi-stage Docker image featuring Tini PID 1 supervisor, non-root execution, Gunicorn process manager with Uvicorn workers, and persistent volume support.
 
 ```
 ┌────────────────────────────────────────────────────────┐
 │                   React 18 SPA Client                  │
 │       (Editor, Inline Diff Viewer, Insights Chart)     │
 └───────────────────────────┬────────────────────────────┘
-                            │ REST / JSON (UTF-16 Offsets)
+                            │ Single-Port HTTP / REST
                             ▼
 ┌────────────────────────────────────────────────────────┐
 │                  FastAPI Backend Server                │
 │  ┌──────────────────────┐    ┌──────────────────────┐  │
-│  │ Revision Concurrency │    │     AI Service       │  │
+│  │ Static SPA & Assets  │    │     AI Service       │  │
+│  │ (frontend/dist)      │    │ (OpenRouter / Gemini)│  │
 │  └──────────┬───────────┘    └──────────┬───────────┘  │
 │             │                           │              │
 │  ┌──────────▼───────────┐    ┌──────────▼───────────┐  │
-│  │ UTF-16 Text Builder  │    │  Taxonomy Validator  │  │
+│  │ Revision Concurrency │    │  Taxonomy Validator  │  │
+│  └──────────┬───────────┘    └──────────┬───────────┘  │
+│             │                           │              │
+│  ┌──────────▼───────────┐    ┌──────────▼───────────┐  │
+│  │ UTF-16 Text Builder  │    │  Health & Endpoints  │  │
 │  └──────────────────────┘    └──────────────────────┘  │
 └───────────────────────────┬────────────────────────────┘
                             │ SQLite Driver (WAL Mode)
                             ▼
 ┌────────────────────────────────────────────────────────┐
-│                     journal.db                         │
+│              journal.db  (/data/journal.db)            │
 │  (journal_entries, analyses, suggestions, actions,...) │
 └────────────────────────────────────────────────────────┘
 ```

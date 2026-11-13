@@ -7,10 +7,12 @@ MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 def run_migrations(db_path: str) -> None:
     """Runs all SQL migration scripts in order against the SQLite database."""
-    conn = sqlite3.connect(db_path)
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path, timeout=30.0)
     try:
         conn.execute("PRAGMA foreign_keys = ON;")
         conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA busy_timeout = 30000;")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS schema_migrations (
