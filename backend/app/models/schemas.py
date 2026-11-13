@@ -106,6 +106,17 @@ class JournalEntryResponse(BaseSchema):
     updatedAt: str = Field(
         ..., validation_alias=AliasChoices("updatedAt", "updated_at")
     )
+    deletedAt: Optional[str] = Field(
+        None, validation_alias=AliasChoices("deletedAt", "deleted_at")
+    )
+
+
+class EntryDeleteResponse(BaseSchema):
+    success: bool = True
+    id: str
+    deletedAt: str = Field(
+        ..., validation_alias=AliasChoices("deletedAt", "deleted_at")
+    )
 
 
 # --- Analysis ---

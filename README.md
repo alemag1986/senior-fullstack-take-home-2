@@ -11,40 +11,125 @@ Full-stack application for language learners. Write journal entries in target fo
 - **Node.js**: 18+ & npm 9+
 - **Database**: SQLite3 (bundled with Python, zero external database setup required)
 
-### Backend Setup
-```bash
-# Navigate to backend directory
-cd backend
+### First-Time Install
 
-# Create and activate virtual environment
+#### 1. Backend
+```bash
+# From project root:
+cd backend
 python3 -m venv .venv
 source .venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Configure environment variables
 cp .env.example .env
-# Edit .env and set GEMINI_API_KEY (optional; mock AI mode activates if omitted)
+cd ..
 ```
+*Note: Set `GEMINI_API_KEY` in `backend/.env` (optional; mock AI mode activates if omitted).*
+*Database migrations run automatically on API startup. To run manually: `PYTHONPATH=. python3 db/migrate.py` from root or `PYTHONPATH=.. python3 db/migrate.py` inside `backend/`.*
 
-Database migrations run automatically on API startup. To run them manually:
+#### 2. Frontend
 ```bash
-PYTHONPATH=.. python3 db/migrate.py
-```
-
-### Frontend Setup
-```bash
-# Navigate to frontend directory
-cd frontend
-
-# Install dependencies
-npm install
+# From project root:
+npm --prefix frontend install
+# Or: cd frontend && npm install
 ```
 
 ---
 
-## 2. Tool Description & Features
+## 2. How to Run the Project
+
+### Running Both Together from Project Root
+
+Open two terminal windows at `/Users/ale/Projects/applied-computing`:
+
+**Terminal 1 (Backend):**
+```bash
+source backend/.venv/bin/activate
+uvicorn backend.app.main:app --reload --port 8000
+```
+
+**Terminal 2 (Frontend):**
+```bash
+npm --prefix frontend run dev
+```
+*Frontend dev server starts at `http://localhost:5173`. Swagger docs at `http://localhost:8000/docs`.*
+
+---
+
+### Backend Execution Options
+
+#### Option 1: Run from Project Root (Recommended)
+```bash
+source backend/.venv/bin/activate
+uvicorn backend.app.main:app --reload --port 8000
+```
+
+#### Option 2: Run from Inside `backend/`
+```bash
+cd backend
+source .venv/bin/activate
+PYTHONPATH=.. uvicorn backend.app.main:app --reload --port 8000
+```
+*(Setting `PYTHONPATH=..` includes the parent folder in Python's search path to resolve `backend` as top-level package).*
+
+#### Tip: Work Inside `backend/` Without `PYTHONPATH=..`
+Add a `.pth` file to the virtual environment once:
+```bash
+# Replace python3.x with your venv's python version (e.g. python3.14 or python3.11)
+echo "/Users/ale/Projects/applied-computing" > backend/.venv/lib/python3.*/site-packages/project_root.pth
+```
+After this, Python resolves `backend.*` automatically from any directory with `.venv` active.
+
+---
+
+### Frontend Execution Options
+
+#### Option 1: Run from Project Root (Recommended)
+```bash
+npm --prefix frontend run dev
+```
+
+#### Option 2: Run from Inside `frontend/`
+```bash
+cd frontend
+npm run dev
+```
+
+---
+
+## 3. Running Automated Tests
+
+### Backend Tests
+- **From project root:**
+  ```bash
+  backend/.venv/bin/python -m pytest backend/tests/ -v
+  ```
+- **From inside `backend/`:**
+  ```bash
+  cd backend
+  source .venv/bin/activate
+  PYTHONPATH=.. pytest tests/ -v
+  ```
+
+### Frontend Tests
+- **From project root:**
+  ```bash
+  npm --prefix frontend test
+  npm --prefix frontend run test:watch
+  ```
+- **From inside `frontend/`:**
+  ```bash
+  cd frontend
+  npm test
+  npm run test:watch
+  ```
+
+### Frontend Build
+- **From project root:** `npm --prefix frontend run build`
+- **From inside `frontend/`:** `cd frontend && npm run build`
+
+---
+
+## 4. Tool Description & Features
 
 ### Description
 AI-Assisted Language Journal is an intelligent writing assistant designed for foreign language acquisition. It captures student writing, passes text through an LLM analysis pipeline using controlled linguistic taxonomies, and generates structured inline feedback.
@@ -60,28 +145,28 @@ AI-Assisted Language Journal is an intelligent writing assistant designed for fo
 
 ---
 
-## 3. Commands
+## 5. Command Quick Reference
 
-### Backend Commands
+### Backend Commands (Inside `backend/`)
 | Task | Command |
 | :--- | :--- |
-| **Start Server** | `cd backend && source .venv/bin/activate && PYTHONPATH=.. uvicorn app.main:app --reload --port 8000` |
-| **Run Migrations** | `cd backend && PYTHONPATH=.. python3 db/migrate.py` |
-| **Run All Tests** | `cd backend && PYTHONPATH=.. pytest tests/ -v` |
+| **Start Server** | `source .venv/bin/activate && PYTHONPATH=.. uvicorn backend.app.main:app --reload --port 8000` |
+| **Run Migrations** | `PYTHONPATH=.. python3 db/migrate.py` |
+| **Run All Tests** | `PYTHONPATH=.. pytest tests/ -v` |
 | **API Docs (Swagger)** | Navigate to `http://localhost:8000/docs` while server runs |
 
-### Frontend Commands
+### Frontend Commands (Inside `frontend/`)
 | Task | Command |
 | :--- | :--- |
-| **Start Dev Server** | `cd frontend && npm run dev` (Runs on `http://localhost:5173`) |
-| **Build for Production** | `cd frontend && npm run build` |
-| **Run Unit Tests** | `cd frontend && npm test` |
-| **Run Tests (Watch)** | `cd frontend && npm run test:watch` |
-| **Preview Build** | `cd frontend && npm run preview` |
+| **Start Dev Server** | `npm run dev` (Runs on `http://localhost:5173`) |
+| **Build for Production** | `npm run build` |
+| **Run Unit Tests** | `npm test` |
+| **Run Tests (Watch)** | `npm run test:watch` |
+| **Preview Build** | `npm run preview` |
 
 ---
 
-## 4. Architecture & Model Design
+## 6. Architecture & Model Design
 
 ### System Architecture
 The application uses a decoupled 3-tier architecture:

@@ -12,6 +12,7 @@ interface BlankCanvasProps {
   onAcceptSuggestion: (id: string) => void;
   onDismissSuggestion: (id: string) => void;
   isStale?: boolean;
+  isSidePanelOpen?: boolean;
 }
 
 export const BlankCanvas: React.FC<BlankCanvasProps> = ({
@@ -23,6 +24,7 @@ export const BlankCanvas: React.FC<BlankCanvasProps> = ({
   onAcceptSuggestion,
   onDismissSuggestion,
   isStale,
+  isSidePanelOpen,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [popoverAnchor, setPopoverAnchor] = useState<DOMRect | null>(null);
@@ -78,7 +80,11 @@ export const BlankCanvas: React.FC<BlankCanvasProps> = ({
   const hasDecorations = pendingSuggestions.length > 0 && !isStale;
 
   return (
-    <div className="relative w-full max-w-2xl mx-auto min-h-[calc(100vh-120px)] pt-12 pb-32 px-6">
+    <div
+      className={`relative w-full max-w-2xl mx-auto min-h-[calc(100vh-120px)] pt-12 pb-32 px-6 transition-all duration-300 ${
+        isSidePanelOpen ? 'lg:mr-96 lg:max-w-xl xl:max-w-2xl' : ''
+      }`}
+    >
       {/* Distraction-Free Writing Canvas */}
       <div className="relative font-mono text-lg leading-[1.75] tracking-tight">
         {/* If we have active suggestions, render the decoration view alongside textarea */}
@@ -134,8 +140,8 @@ export const BlankCanvas: React.FC<BlankCanvasProps> = ({
         )}
       </div>
 
-      {/* Floating Popover for Selected Suggestion */}
-      {selectedSuggestion && (
+      {/* Floating Popover for Selected Suggestion (only when side panel is closed) */}
+      {selectedSuggestion && !isSidePanelOpen && (
         <SuggestionPopover
           suggestion={selectedSuggestion}
           anchorRect={popoverAnchor}

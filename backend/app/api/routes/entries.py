@@ -10,6 +10,7 @@ from backend.app.models.enums import AnalysisStatus, OffsetEncoding
 from backend.app.models.schemas import (
     AnalysisResponse,
     EntryAnalyzeRequest,
+    EntryDeleteResponse,
     JournalEntryCreateOrUpdate,
     JournalEntryResponse,
     SuggestionEdit,
@@ -21,6 +22,7 @@ from backend.app.services.ai_service import (
     get_active_model_version,
 )
 from backend.app.services.journal_service import (
+    delete_entry,
     get_entry,
     list_entries,
     save_or_update_entry,
@@ -32,11 +34,12 @@ router = APIRouter(prefix="/entries", tags=["entries"])
 
 @router.get("", response_model=List[JournalEntryResponse])
 def get_user_entries(
+    include_deleted: bool = False,
     user_id: str = Depends(get_authenticated_user_id),
     conn: sqlite3.Connection = Depends(get_db_conn),
 ) -> List[JournalEntryResponse]:
     """Lists entries for the current user in reverse chronological order."""
-    return list_entries(conn, user_id)
+    return list_entries(conn, user_id, include_deleted=include_deleted)
 
 
 @router.post("", response_model=JournalEntryResponse)
@@ -199,8 +202,19 @@ def analyze_entry(
 @router.get("/{entry_id}", response_model=JournalEntryResponse)
 def get_single_entry(
     entry_id: str,
+    include_deleted: bool = False,
     user_id: str = Depends(get_authenticated_user_id),
     conn: sqlite3.Connection = Depends(get_db_conn),
 ) -> JournalEntryResponse:
     """Retrieves an entry by its ID, enforcing ownership."""
-    return get_entry(conn, entry_id, user_id)
+    return get_entry(conn, entry_id, user_id, include_deleted=include_deleted)
+
+
+@router.delete("/{entry_id}", response_model=EntryDeleteResponse)
+def remove_entry(
+    entry_id: str,
+    user_id: str = Depends(get_authenticated_user_id),
+    conn: sqlite3.Connection = Depends(get_db_conn),
+) -> EntryDeleteResponse:
+    """Soft deletes a journal entry, keeping previous corrections/suggestions intact."""
+    return delete_entry(conn, entry_id, user_id)

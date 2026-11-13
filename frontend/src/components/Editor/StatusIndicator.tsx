@@ -10,9 +10,13 @@ interface StatusIndicatorProps {
   isLoading: boolean;
   error?: string | null;
   isMock?: boolean;
+  pendingSuggestionsCount?: number;
+  isSidePanelOpen?: boolean;
+  onOpenHistory?: () => void;
   onOpenSettings: () => void;
   onOpenHelp: () => void;
   onOpenInsights?: () => void;
+  onToggleSidePanel?: () => void;
   onReview: () => void;
 }
 
@@ -25,9 +29,13 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   isLoading,
   error,
   isMock,
+  pendingSuggestionsCount = 0,
+  isSidePanelOpen = false,
+  onOpenHistory,
   onOpenSettings,
   onOpenHelp,
   onOpenInsights,
+  onToggleSidePanel,
   onReview,
 }) => {
   const [isVisible, setIsVisible] = useState(true);
@@ -57,8 +65,12 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   return (
     <div
       data-testid="status-indicator"
-      className={`fixed bottom-5 right-6 z-40 transition-opacity duration-500 font-mono text-xs flex flex-col items-end gap-2 select-none ${
-        isVisible || isStale || isLoading || error ? 'opacity-100' : 'opacity-25 hover:opacity-100'
+      className={`fixed bottom-5 ${
+        isSidePanelOpen ? 'lg:right-[25rem] right-6' : 'right-6'
+      } z-40 transition-all duration-300 font-mono text-xs flex flex-col items-end gap-2 select-none ${
+        isVisible || isStale || isLoading || error || isSidePanelOpen
+          ? 'opacity-100'
+          : 'opacity-25 hover:opacity-100'
       }`}
     >
       {/* Stale notice */}
@@ -142,6 +154,49 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
         <span className={isDirty ? 'text-amber-500' : 'text-zinc-400'}>
           {isDirty ? 'Unsaved' : 'Saved'}
         </span>
+
+        {/* History button */}
+        {onOpenHistory && (
+          <>
+            <span className="text-zinc-300 dark:text-zinc-700">•</span>
+            <button
+              type="button"
+              onClick={onOpenHistory}
+              data-testid="open-history-button"
+              className="hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors opacity-80 hover:opacity-100"
+              title="Journal History (Ctrl+H)"
+            >
+              History
+            </button>
+          </>
+        )}
+
+        {/* AI Corrections / Side Panel button */}
+        {onToggleSidePanel && (
+          <>
+            <span className="text-zinc-300 dark:text-zinc-700">•</span>
+            <button
+              type="button"
+              data-testid="toggle-side-panel-btn"
+              onClick={onToggleSidePanel}
+              className={`flex items-center gap-1 font-semibold transition-colors ${
+                isSidePanelOpen
+                  ? 'text-blue-600 dark:text-blue-400'
+                  : pendingSuggestionsCount > 0
+                  ? 'text-purple-600 dark:text-purple-400 hover:underline'
+                  : 'hover:text-zinc-900 dark:hover:text-zinc-200'
+              }`}
+              title="Toggle AI Corrections Panel (Ctrl+J)"
+            >
+              <span>✦</span>
+              <span>
+                {pendingSuggestionsCount > 0
+                  ? `${pendingSuggestionsCount} ${pendingSuggestionsCount === 1 ? 'fix' : 'fixes'}`
+                  : 'Review'}
+              </span>
+            </button>
+          </>
+        )}
 
         {/* Insights button */}
         {onOpenInsights && (

@@ -9,6 +9,7 @@ export interface ShortcutHandlers {
   onOpenInsights?: () => void;
   onEscape?: () => void;
   onToggleCompare?: () => void;
+  onToggleReviewPanel?: () => void;
 }
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers, enabled = true) {
@@ -77,6 +78,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers, enabled = true)
       if ((e.altKey && key === 'c') || (modifier && e.shiftKey && key === 'c')) {
         e.preventDefault();
         handlers.onToggleCompare?.();
+        return;
+      }
+
+      // Review Side Panel toggle: Ctrl+J or Cmd+J
+      if (modifier && key === 'j') {
+        e.preventDefault();
+        handlers.onToggleReviewPanel?.();
         return;
       }
     };

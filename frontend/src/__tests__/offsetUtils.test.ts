@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ActiveSuggestion, Suggestion } from '../types/journal';
 import {
+  applyAllPendingSuggestions,
   applySuggestion,
+  getLineAndCol,
   isDeletion,
   isInsertion,
   isReplacement,
@@ -181,6 +183,58 @@ describe('offsetUtils', () => {
 
       const updatedS2 = result.updatedSuggestions.find((s) => s.id === 's2');
       expect(updatedS2?.state).toBe('dismissed');
+    });
+  });
+
+  describe('getLineAndCol', () => {
+    it('returns Line 1 Col 1 for start of text', () => {
+      const text = 'Hello world';
+      expect(getLineAndCol(text, 0)).toEqual({ line: 1, col: 1 });
+    });
+
+    it('calculates correct line and column across multiline text', () => {
+      const text = 'Line 1\nLine 2\nLine 3 with words';
+      // Offset of 'with' in Line 3
+      const offset = text.indexOf('with');
+      expect(getLineAndCol(text, offset)).toEqual({ line: 3, col: 8 });
+    });
+
+    it('clamps negative or out-of-range offsets gracefully', () => {
+      const text = 'Short';
+      expect(getLineAndCol(text, -5)).toEqual({ line: 1, col: 1 });
+      expect(getLineAndCol(text, 999)).toEqual({ line: 1, col: 6 });
+    });
+  });
+
+  describe('applyAllPendingSuggestions', () => {
+    it('applies multiple non-overlapping suggestions right-to-left accurately', () => {
+      const text = 'Yo tener hambre y mis amigo llegaron.';
+      const s1: ActiveSuggestion = {
+        id: 's1',
+        category: 'grammar_syntax',
+        kind: 'correction',
+        ruleCode: 'G1',
+        state: 'pending',
+        activeRange: { start: 3, end: 8 },
+        edit: { start: 3, end: 8, original: 'tener', replacement: 'tenía' },
+        explanation: { title: 'T1', message: 'M1' },
+      };
+      const s2: ActiveSuggestion = {
+        id: 's2',
+        category: 'grammar_syntax',
+        kind: 'correction',
+        ruleCode: 'G2',
+        state: 'pending',
+        activeRange: { start: 22, end: 27 },
+        edit: { start: 22, end: 27, original: 'amigo', replacement: 'amigos' },
+        explanation: { title: 'T2', message: 'M2' },
+      };
+
+      const result = applyAllPendingSuggestions(text, [s1, s2]);
+      expect(result.success).toBe(true);
+      expect(result.appliedCount).toBe(2);
+      expect(result.newText).toBe('Yo tenía hambre y mis amigos llegaron.');
+      expect(result.updatedSuggestions.every((s) => s.state === 'accepted')).toBe(true);
     });
   });
 });

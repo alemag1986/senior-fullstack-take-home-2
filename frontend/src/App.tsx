@@ -3,10 +3,11 @@ import { JournalApiClient } from './api/client';
 import { BlankCanvas } from './components/Editor/BlankCanvas';
 import { StatusIndicator } from './components/Editor/StatusIndicator';
 import { VersionCompare } from './components/Compare/VersionCompare';
+import { SideReviewPanel } from './components/Review/SideReviewPanel';
 import { HistoryModal } from './components/Modals/HistoryModal';
 import { ThemeModal } from './components/Modals/ThemeModal';
 import { HelpModal } from './components/Modals/HelpModal';
-import { InsightsModal } from './components/Modals/InsightsModal';
+// import { InsightsModal } from './components/Modals/InsightsModal';
 import { useAutoSave } from './hooks/useAutoSave';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useLanguageDetector } from './hooks/useLanguageDetector';
@@ -51,7 +52,8 @@ export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isCompareOpen, setIsCompareOpen] = useState(false);
-  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
+  // Insights hidden for now: const [isInsightsOpen, setIsInsightsOpen] = useState(false);
+  const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
 
   // Sync entries from backend DB and local web storage
   const syncJournals = useCallback(async (guid = sessionGuid) => {
@@ -182,6 +184,8 @@ export const App: React.FC = () => {
     applyAnalysis,
     acceptSuggestion,
     dismissSuggestion,
+    acceptAllSuggestions,
+    dismissAllSuggestions,
     notifyManualEdit,
   } = useSuggestions(entry, handleUpdateContent);
 
@@ -206,6 +210,22 @@ export const App: React.FC = () => {
     apiClient.submitDecision(entry.id, entry.revision, id, 'dismissed');
   };
 
+  const handleAcceptAll = () => {
+    const pending = activeSuggestions.filter((s) => s.state === 'pending');
+    acceptAllSuggestions();
+    pending.forEach((s) => {
+      apiClient.submitDecision(entry.id, entry.revision, s.id, 'accepted');
+    });
+  };
+
+  const handleDismissAll = () => {
+    const pending = activeSuggestions.filter((s) => s.state === 'pending');
+    dismissAllSuggestions();
+    pending.forEach((s) => {
+      apiClient.submitDecision(entry.id, entry.revision, s.id, 'dismissed');
+    });
+  };
+
   // Action: Save Entry (Ctrl+S / Cmd+S)
   const handleSave = useCallback(async () => {
     if (!entry.content.trim()) return;
@@ -226,6 +246,9 @@ export const App: React.FC = () => {
     setIsLoading(true);
     const result = await apiClient.analyze(entry);
     applyAnalysis(result, entry);
+    if (result.suggestions && result.suggestions.length > 0) {
+      setIsSidePanelOpen(true);
+    }
 
     // Sync analyzed entry to local history and web storage
     setEntriesHistory((prev) => {
@@ -249,6 +272,7 @@ export const App: React.FC = () => {
     };
     setEntry(fresh);
     setSelectedSuggestionId(null);
+    setIsSidePanelOpen(false);
   }, [activeLanguageCode, setSelectedSuggestionId]);
 
   // Action: Select Past Entry from History
@@ -257,9 +281,26 @@ export const App: React.FC = () => {
     setSelectedSuggestionId(null);
   }, [setSelectedSuggestionId]);
 
+  // Action: Remove / Soft Delete Entry
+  const handleDeleteEntry = useCallback(
+    async (entryId: string) => {
+      await apiClient.deleteEntry(entryId);
+      setEntriesHistory((prev) => {
+        const filtered = prev.filter((e) => e.id !== entryId);
+        localStorage.setItem(`journal_history_${sessionGuid}`, JSON.stringify(filtered));
+        return filtered;
+      });
+
+      if (entry.id === entryId) {
+        handleNewEntry();
+      }
+    },
+    [apiClient, sessionGuid, entry.id, handleNewEntry]
+  );
+
   // Global Keyboard Shortcuts
   const anyModalOpen =
-    isHistoryOpen || isSettingsOpen || isHelpOpen || isCompareOpen || isInsightsOpen;
+    isHistoryOpen || isSettingsOpen || isHelpOpen || isCompareOpen;
 
   useKeyboardShortcuts({
     onSave: handleSave,
@@ -267,7 +308,8 @@ export const App: React.FC = () => {
     onOpenHistory: () => setIsHistoryOpen(true),
     onOpenSettings: () => setIsSettingsOpen(true),
     onOpenHelp: () => setIsHelpOpen(true),
-    onOpenInsights: () => setIsInsightsOpen(true),
+    // onOpenInsights: () => setIsInsightsOpen(true),
+    onToggleReviewPanel: () => setIsSidePanelOpen((prev) => !prev),
     onToggleCompare: () => {
       if (!isStale && activeSuggestions.length > 0) {
         setIsCompareOpen((prev) => !prev);
@@ -279,7 +321,8 @@ export const App: React.FC = () => {
         setIsSettingsOpen(false);
         setIsHelpOpen(false);
         setIsCompareOpen(false);
-        setIsInsightsOpen(false);
+      } else if (isSidePanelOpen) {
+        setIsSidePanelOpen(false);
       } else if (selectedSuggestionId) {
         setSelectedSuggestionId(null);
       }
@@ -307,9 +350,26 @@ export const App: React.FC = () => {
         onAcceptSuggestion={handleAcceptSuggestion}
         onDismissSuggestion={handleDismissSuggestion}
         isStale={isStale}
+        isSidePanelOpen={isSidePanelOpen}
       />
 
-      {/* 2. Non-Intrusive Faded Status Indicator */}
+      {/* 2. Side Review Panel (Click to jump to correction point) */}
+      <SideReviewPanel
+        isOpen={isSidePanelOpen}
+        onClose={() => setIsSidePanelOpen(false)}
+        activeSuggestions={activeSuggestions}
+        selectedSuggestionId={selectedSuggestionId}
+        content={entry.content}
+        isStale={isStale}
+        onSelectSuggestion={setSelectedSuggestionId}
+        onAcceptSuggestion={handleAcceptSuggestion}
+        onDismissSuggestion={handleDismissSuggestion}
+        onAcceptAll={handleAcceptAll}
+        onDismissAll={handleDismissAll}
+        onReviewAgain={handleReview}
+      />
+
+      {/* 3. Non-Intrusive Faded Status Indicator */}
       <StatusIndicator
         wordCount={wordCount}
         language={activeLanguage}
@@ -319,13 +379,19 @@ export const App: React.FC = () => {
         isLoading={isLoading}
         error={error}
         isMock={analysis?.isMock}
+        pendingSuggestionsCount={
+          activeSuggestions.filter((s) => s.state === 'pending').length
+        }
+        isSidePanelOpen={isSidePanelOpen}
+        onToggleSidePanel={() => setIsSidePanelOpen((prev) => !prev)}
+        onOpenHistory={() => setIsHistoryOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenHelp={() => setIsHelpOpen(true)}
-        onOpenInsights={() => setIsInsightsOpen(true)}
+        /* onOpenInsights={() => setIsInsightsOpen(true)} */
         onReview={handleReview}
       />
 
-      {/* 3. Version Comparison Diff Overlay */}
+      {/* 4. Version Comparison Diff Overlay */}
       {isCompareOpen && (
         <VersionCompare
           currentText={entry.content}
@@ -343,6 +409,7 @@ export const App: React.FC = () => {
           onSelectEntry={handleSelectEntry}
           onNewEntry={handleNewEntry}
           onRefresh={() => syncJournals(sessionGuid)}
+          onDeleteEntry={handleDeleteEntry}
           onClose={() => setIsHistoryOpen(false)}
         />
       )}
@@ -372,13 +439,13 @@ export const App: React.FC = () => {
         />
       )}
 
-      {/* 6. Learning Insights Modal (Ctrl+I) */}
-      {isInsightsOpen && (
+      {/* 6. Learning Insights Modal (Ctrl+I) - hidden for now */}
+      {/* {isInsightsOpen && (
         <InsightsModal
           apiClient={apiClient}
           onClose={() => setIsInsightsOpen(false)}
         />
-      )}
+      )} */}
 
       {/* 7. Help Modal (Ctrl+/ / ?) */}
       {isHelpOpen && <HelpModal onClose={() => setIsHelpOpen(false)} />}

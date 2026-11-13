@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ActiveSuggestion, Analysis, JournalEntry } from '../types/journal';
-import { applySuggestion } from '../utils/offsetUtils';
+import { applyAllPendingSuggestions, applySuggestion } from '../utils/offsetUtils';
 
 export function useSuggestions(
   entry: JournalEntry,
@@ -93,6 +93,30 @@ export function useSuggestions(
   };
 
   /**
+   * Accepts all pending suggestions in batch.
+   */
+  const acceptAllSuggestions = () => {
+    if (isStale) return;
+    const result = applyAllPendingSuggestions(entry.content, activeSuggestions);
+    if (!result.success || result.appliedCount === 0) return;
+
+    setActiveSuggestions(result.updatedSuggestions);
+    setSelectedSuggestionId(null);
+    onUpdateContent(result.newText, entry.revision + 1);
+  };
+
+  /**
+   * Dismisses all pending suggestions.
+   */
+  const dismissAllSuggestions = () => {
+    const updated = activeSuggestions.map((s) =>
+      s.state === 'pending' ? { ...s, state: 'dismissed' as const } : s
+    );
+    setActiveSuggestions(updated);
+    setSelectedSuggestionId(null);
+  };
+
+  /**
    * Handles manual edits to the editor canvas:
    * Marks the current analysis as stale, clears active underlines, and shows notice.
    */
@@ -126,6 +150,8 @@ export function useSuggestions(
     applyAnalysis,
     acceptSuggestion,
     dismissSuggestion,
+    acceptAllSuggestions,
+    dismissAllSuggestions,
     notifyManualEdit,
     clearAnalysis,
   };

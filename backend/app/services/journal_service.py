@@ -5,7 +5,11 @@ from typing import List, Optional
 from backend.app.core.config import settings
 from backend.app.core.errors import AppError
 from backend.app.core.security import verify_entry_ownership
-from backend.app.models.schemas import JournalEntryCreateOrUpdate, JournalEntryResponse
+from backend.app.models.schemas import (
+    EntryDeleteResponse,
+    JournalEntryCreateOrUpdate,
+    JournalEntryResponse,
+)
 from backend.app.services.utf16 import utf16_len
 
 
@@ -14,6 +18,8 @@ def _now_iso() -> str:
 
 
 def row_to_entry_response(row: sqlite3.Row) -> JournalEntryResponse:
+    keys = row.keys()
+    deleted_at = row["deleted_at"] if "deleted_at" in keys else None
     return JournalEntryResponse(
         id=row["id"],
         userId=row["user_id"],
@@ -24,6 +30,7 @@ def row_to_entry_response(row: sqlite3.Row) -> JournalEntryResponse:
         revision=row["revision"],
         createdAt=row["created_at"],
         updatedAt=row["updated_at"],
+        deletedAt=deleted_at,
     )
 
 
@@ -35,7 +42,10 @@ def get_entry_row(conn: sqlite3.Connection, entry_id: str) -> Optional[sqlite3.R
 
 
 def get_entry(
-    conn: sqlite3.Connection, entry_id: str, user_id: str
+    conn: sqlite3.Connection,
+    entry_id: str,
+    user_id: str,
+    include_deleted: bool = False,
 ) -> JournalEntryResponse:
     row = get_entry_row(conn, entry_id)
     if not row:
@@ -45,17 +55,60 @@ def get_entry(
             status_code=404,
         )
     verify_entry_ownership(row["user_id"], user_id)
+    if not include_deleted and "deleted_at" in row.keys() and row["deleted_at"] is not None:
+        raise AppError(
+            code="NOT_FOUND",
+            message=f"Journal entry '{entry_id}' not found.",
+            status_code=404,
+        )
     return row_to_entry_response(row)
 
 
 def list_entries(
-    conn: sqlite3.Connection, user_id: str
+    conn: sqlite3.Connection,
+    user_id: str,
+    include_deleted: bool = False,
 ) -> List[JournalEntryResponse]:
-    cursor = conn.execute(
-        "SELECT * FROM journal_entries WHERE user_id = ? ORDER BY updated_at DESC;",
-        (user_id,),
-    )
+    if include_deleted:
+        cursor = conn.execute(
+            "SELECT * FROM journal_entries WHERE user_id = ? ORDER BY updated_at DESC;",
+            (user_id,),
+        )
+    else:
+        cursor = conn.execute(
+            "SELECT * FROM journal_entries WHERE user_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC;",
+            (user_id,),
+        )
     return [row_to_entry_response(r) for r in cursor.fetchall()]
+
+
+def delete_entry(
+    conn: sqlite3.Connection,
+    entry_id: str,
+    user_id: str,
+) -> EntryDeleteResponse:
+    existing = get_entry_row(conn, entry_id)
+    if not existing:
+        raise AppError(
+            code="NOT_FOUND",
+            message=f"Journal entry '{entry_id}' not found.",
+            status_code=404,
+        )
+    verify_entry_ownership(existing["user_id"], user_id)
+    if "deleted_at" in existing.keys() and existing["deleted_at"] is not None:
+        raise AppError(
+            code="NOT_FOUND",
+            message=f"Journal entry '{entry_id}' is already removed.",
+            status_code=404,
+        )
+
+    now = _now_iso()
+    conn.execute(
+        "UPDATE journal_entries SET deleted_at = ?, updated_at = ? WHERE id = ?;",
+        (now, now, entry_id),
+    )
+    conn.commit()
+    return EntryDeleteResponse(success=True, id=entry_id, deletedAt=now)
 
 
 def save_or_update_entry(
@@ -78,6 +131,13 @@ def save_or_update_entry(
 
     if existing:
         verify_entry_ownership(existing["user_id"], user_id)
+
+        if "deleted_at" in existing.keys() and existing["deleted_at"] is not None:
+            raise AppError(
+                code="ENTRY_DELETED",
+                message=f"Journal entry '{entry_id}' has been removed.",
+                status_code=400,
+            )
 
         # Revision concurrency check for manual saves
         expected_rev = (

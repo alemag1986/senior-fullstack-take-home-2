@@ -12,6 +12,7 @@ export interface JournalEntry {
   revision: number; // Incremented on edits / accepted suggestions
   createdAt?: string;
   updatedAt?: string;
+  deletedAt?: string;
 }
 
 export interface SuggestionEdit {

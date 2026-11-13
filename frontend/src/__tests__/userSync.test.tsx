@@ -165,6 +165,119 @@ describe('User Switching, Refreshing & Web Storage Synchronization', () => {
       fireEvent.click(refreshBtn);
       expect(onRefresh).toHaveBeenCalledTimes(1);
     });
+
+    it('handles entry deletion with two-step confirmation', async () => {
+      const onDeleteEntry = vi.fn();
+      const mockEntries = [
+        {
+          id: 'entry-to-del',
+          title: 'To Delete',
+          targetLanguage: 'es',
+          content: 'Test delete content',
+          revision: 1,
+          updatedAt: '2026-11-12T10:00:00Z',
+        },
+      ];
+
+      render(
+        <HistoryModal
+          entries={mockEntries}
+          currentEntryId="other"
+          onSelectEntry={vi.fn()}
+          onNewEntry={vi.fn()}
+          onDeleteEntry={onDeleteEntry}
+          onClose={vi.fn()}
+        />
+      );
+
+      // Delete icon is rendered
+      const deleteBtn = screen.getByTestId('delete-entry-entry-to-del');
+      expect(deleteBtn).toBeInTheDocument();
+
+      // Click delete -> shows Confirm and Cancel buttons
+      fireEvent.click(deleteBtn);
+      const confirmBtn = screen.getByTestId('confirm-delete-entry-to-del');
+      const cancelBtn = screen.getByTestId('cancel-delete-entry-to-del');
+      expect(confirmBtn).toBeInTheDocument();
+      expect(cancelBtn).toBeInTheDocument();
+
+      // Click cancel -> confirmation dismissed without calling onDeleteEntry
+      fireEvent.click(cancelBtn);
+      expect(onDeleteEntry).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('confirm-delete-entry-to-del')).not.toBeInTheDocument();
+
+      // Click delete again and confirm -> onDeleteEntry called
+      fireEvent.click(screen.getByTestId('delete-entry-entry-to-del'));
+      fireEvent.click(screen.getByTestId('confirm-delete-entry-to-del'));
+      expect(onDeleteEntry).toHaveBeenCalledWith('entry-to-del');
+    });
+  });
+
+  describe('App Full Flow: Soft Delete Entry', () => {
+    it('deletes active entry and resets canvas state', async () => {
+      const entryToDelete = {
+        id: 'entry-active-1',
+        title: 'Active To Delete',
+        targetLanguage: 'es',
+        content: 'Entry that is currently active and will be deleted',
+        revision: 1,
+        updatedAt: '2026-11-12T10:00:00Z',
+      };
+
+      localStorage.setItem('journal_session_guid', 'user-del-test');
+      localStorage.setItem('journal_history_user-del-test', JSON.stringify([entryToDelete]));
+
+      let deletedIdCalled: string | null = null;
+      global.fetch = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+        if (url.endsWith('/api/entries')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve([entryToDelete]),
+          });
+        }
+        if (url.includes('/api/entries/entry-active-1') && options?.method === 'DELETE') {
+          deletedIdCalled = 'entry-active-1';
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ success: true, id: 'entry-active-1', deletedAt: '2026-11-12T12:00:00Z' }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }) as any;
+
+      const { unmount } = render(<App />);
+
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+
+      // Open history modal
+      const historyBtn = screen.getByTestId('open-history-button');
+      fireEvent.click(historyBtn);
+
+      // Select the entry to make it active
+      const entryRow = screen.getByText(/Entry that is currently active/i);
+      fireEvent.click(entryRow);
+
+      // Re-open history modal to delete it
+      fireEvent.click(screen.getByTestId('open-history-button'));
+
+      // Click delete button and confirm
+      const deleteBtn = screen.getByTestId('delete-entry-entry-active-1');
+      fireEvent.click(deleteBtn);
+      const confirmBtn = screen.getByTestId('confirm-delete-entry-active-1');
+      await act(async () => {
+        fireEvent.click(confirmBtn);
+      });
+
+      expect(deletedIdCalled).toBe('entry-active-1');
+
+      // Entry is removed from web storage
+      const stored = JSON.parse(localStorage.getItem('journal_history_user-del-test') || '[]');
+      expect(stored).toHaveLength(0);
+
+      unmount();
+    });
   });
 
   describe('App Full Flow: User change refreshes journals and syncs web storage', () => {

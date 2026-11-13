@@ -12,6 +12,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ onClose }) => {
   const shortcuts = [
     { key: `${mod} + S`, description: 'Save current journal entry' },
     { key: `${mod} + Enter`, description: 'Send entry for AI Review & Suggestions (or Alt+R)' },
+    { key: `${mod} + J`, description: 'Toggle AI corrections side panel (click reference to jump)' },
     { key: isMac ? '⌘ + O / Ctrl + H' : 'Ctrl + H', description: 'Open entries history (newer to older)' },
     { key: `${mod} + ,`, description: 'Screen & Session options (theme, language, GUID)' },
     { key: 'Alt + C', description: 'Toggle version comparison (word-level diff)' },

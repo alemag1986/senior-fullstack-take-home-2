@@ -104,6 +104,19 @@ export class JournalApiClient {
     }
   }
 
+  async deleteEntry(entryId: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE}/entries/${entryId}`, {
+        method: 'DELETE',
+        headers: this.getHeaders(),
+      });
+      return response.ok;
+    } catch {
+      // Offline fallback: treat as succeeded locally
+      return true;
+    }
+  }
+
   async submitDecision(
     entryId: string,
     expectedRevision: number,

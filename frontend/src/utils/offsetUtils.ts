@@ -145,3 +145,65 @@ export function applySuggestion(
     updatedSuggestions,
   };
 }
+
+/**
+ * Calculates 1-based line and column numbers for a given character offset.
+ */
+export function getLineAndCol(text: string, offset: number): { line: number; col: number } {
+  const safeOffset = Math.max(0, Math.min(offset, text.length));
+  const sub = text.slice(0, safeOffset);
+  const lines = sub.split('\n');
+  return {
+    line: lines.length,
+    col: lines[lines.length - 1].length + 1,
+  };
+}
+
+/**
+ * Applies all pending suggestions in reverse offset order (right-to-left)
+ * to avoid offset invalidation cascades.
+ */
+export function applyAllPendingSuggestions(
+  currentText: string,
+  activeSuggestions: ActiveSuggestion[]
+): {
+  success: boolean;
+  newText: string;
+  updatedSuggestions: ActiveSuggestion[];
+  appliedCount: number;
+} {
+  const pending = activeSuggestions
+    .filter((s) => s.state === 'pending')
+    .sort((a, b) => b.activeRange.start - a.activeRange.start);
+
+  let newText = currentText;
+  const acceptedIds = new Set<string>();
+
+  for (const s of pending) {
+    const { start, end } = s.activeRange;
+    const { original, replacement } = s.edit;
+
+    if (newText.slice(start, end) === original) {
+      newText = newText.slice(0, start) + replacement + newText.slice(end);
+      acceptedIds.add(s.id);
+    }
+  }
+
+  const updatedSuggestions = activeSuggestions.map((s) => {
+    if (acceptedIds.has(s.id)) {
+      return { ...s, state: 'accepted' as const };
+    }
+    if (s.state === 'pending') {
+      return { ...s, state: 'dismissed' as const };
+    }
+    return s;
+  });
+
+  return {
+    success: true,
+    newText,
+    updatedSuggestions,
+    appliedCount: acceptedIds.size,
+  };
+}
+
