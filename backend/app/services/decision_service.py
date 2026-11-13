@@ -202,13 +202,7 @@ def apply_decisions(
     seen_in_payload = set()
     newly_accepted_suggestions: List[SuggestionRowItem] = []
     actions_to_record: List[ActionRecord] = []
-
-    # Calculate next revision provisionally
-    has_new_acceptances = any(
-        d.action == ActionType.ACCEPTED and d.suggestionId not in resolved_actions
-        for d in payload.decisions
-    )
-    next_revision = entry["revision"] + (1 if has_new_acceptances else 0)
+    new_actions_to_insert: List[tuple] = []
     now = _now_iso()
 
     for d in payload.decisions:
@@ -257,31 +251,7 @@ def apply_decisions(
                     )
                 )
 
-            actions_to_record.append(
-                ActionRecord(
-                    id=action_id,
-                    suggestionId=d.suggestionId,
-                    action=d.action,
-                    resultingEntryRevision=next_revision,
-                    createdAt=now,
-                )
-            )
-
-            # Insert into suggestion_actions
-            conn.execute(
-                """
-                INSERT INTO suggestion_actions (
-                    id, suggestion_id, action, resulting_entry_revision, created_at
-                ) VALUES (?, ?, ?, ?, ?);
-                """,
-                (
-                    action_id,
-                    d.suggestionId,
-                    d.action.value,
-                    next_revision,
-                    now,
-                ),
-            )
+            new_actions_to_insert.append((action_id, d.suggestionId, d.action))
 
     # 8. Rebuild text from source snapshot using all accepted suggestions
     all_accepted = prior_accepted_suggestions + newly_accepted_suggestions
@@ -291,6 +261,32 @@ def apply_decisions(
 
     actual_content_changed = final_text != entry["content"]
     final_revision = entry["revision"] + (1 if actual_content_changed else 0)
+
+    # Record and insert new actions with final_revision
+    for action_id, sug_id, act_type in new_actions_to_insert:
+        actions_to_record.append(
+            ActionRecord(
+                id=action_id,
+                suggestionId=sug_id,
+                action=act_type,
+                resultingEntryRevision=final_revision,
+                createdAt=now,
+            )
+        )
+        conn.execute(
+            """
+            INSERT INTO suggestion_actions (
+                id, suggestion_id, action, resulting_entry_revision, created_at
+            ) VALUES (?, ?, ?, ?, ?);
+            """,
+            (
+                action_id,
+                sug_id,
+                act_type.value,
+                final_revision,
+                now,
+            ),
+        )
 
     # 9. Update entry
     conn.execute(

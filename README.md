@@ -2,6 +2,7 @@
 
 Full-stack application for language learners. Write journal entries in target foreign languages, receive granular AI corrections with exact inline text offsets, review and accept/dismiss suggestions interactively, and track learning progress over time.
 
+
 ---
 
 ## 1. Local Run Requirements & Setup
@@ -23,8 +24,6 @@ pip install -r requirements.txt
 cp .env.example .env
 cd ..
 ```
-*Note: Set `GEMINI_API_KEY` in `backend/.env` (optional; mock AI mode activates if omitted).*
-*Database migrations run automatically on API startup. To run manually: `PYTHONPATH=. python3 db/migrate.py` from root or `PYTHONPATH=.. python3 db/migrate.py` inside `backend/`.*
 
 #### 2. Frontend
 ```bash
@@ -37,7 +36,7 @@ npm --prefix frontend install
 
 ## 2. How to Run the Project
 
-### 2.1. Unified Production Mode (FastAPI Serving React SPA) [Recommended]
+### 2.1. Unified Production Mode (FastAPI Serving React SPA) 
 
 In this mode, FastAPI acts as a single-port server serving both the compiled React frontend Single-Page Application (SPA) directly from `frontend/dist` and all backend REST endpoints (`/api/*`, `/health`, and `/docs`) on `http://localhost:8000/`. This eliminates CORS issues and port mismatches entirely.
 
@@ -226,7 +225,7 @@ AI-Assisted Language Journal is an intelligent writing assistant designed for fo
 - **Safe UTF-16 Offset Alignment**: Offsets match JavaScript `String.slice()` indices and preserve Unicode surrogate pairs (e.g. emoji and accented glyphs).
 - **Interactive Review Flow**: Review suggestions individually. Accepting a suggestion applies right-to-left text reconstruction to avoid index drift; dismissing retains original text.
 - **Optimistic Concurrency Control**: Entries maintain incrementing `revision` counters. Out-of-date updates yield `409 Conflict` to prevent overwriting edits.
-- **Stage 2 Learning Insights**: Aggregates mistake frequency, category breakdowns, common error rules, and writing activity trends over time.
+- [TODO] **Stage 2 Learning Insights**: Aggregates mistake frequency, category breakdowns, common error rules, and writing activity trends over time.
 - **Session Isolation**: Supports multi-tenant user scoping via `X-Session-ID` header (defaults to `dev-user-default`).
 - **Unified Single-Port Delivery**: FastAPI serves the React SPA static build, handling client routing alongside `/api/*` endpoints and `/health` with zero CORS hurdles.
 - **Production Containerization**: Multi-stage Dockerfile with Tini supervisor, non-root user, Gunicorn workers, and persistent SQLite storage.

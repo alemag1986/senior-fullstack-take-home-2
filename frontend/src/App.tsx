@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { JournalApiClient } from './api/client';
 import { BlankCanvas } from './components/Editor/BlankCanvas';
 import { StatusIndicator } from './components/Editor/StatusIndicator';
@@ -192,6 +192,9 @@ export const App: React.FC = () => {
     clearAnalysis,
   } = useSuggestions(entry, handleUpdateContent);
 
+  const entryRef = useRef(entry);
+  entryRef.current = entry;
+
   // User typing in editor canvas
   const handleEditorChange = (newContent: string) => {
     notifyManualEdit();
@@ -203,30 +206,102 @@ export const App: React.FC = () => {
   };
 
   // Synchronize decisions to backend for mistake tracking
-  const handleAcceptSuggestion = (id: string) => {
+  const handleAcceptSuggestion = async (id: string) => {
+    const currentEntry = entryRef.current;
     acceptSuggestion(id);
-    apiClient.submitDecision(entry.id, entry.revision, id, 'accepted');
+    const updated = await apiClient.submitDecision(
+      currentEntry.id,
+      currentEntry.revision,
+      id,
+      'accepted'
+    );
+    if (updated) {
+      setEntry((prev) => ({
+        ...prev,
+        content: updated.content,
+        revision: updated.revision,
+        updatedAt: updated.updatedAt || new Date().toISOString(),
+      }));
+      setEntriesHistory((prev) => {
+        const filtered = prev.filter((e) => e.id !== updated.id);
+        const next = [{ ...prev.find((e) => e.id === updated.id), ...updated }, ...filtered];
+        localStorage.setItem(`journal_history_${sessionGuid}`, JSON.stringify(next));
+        return next;
+      });
+      localStorage.setItem(`journal_draft_${sessionGuid}`, JSON.stringify(updated));
+    }
   };
 
-  const handleDismissSuggestion = (id: string) => {
+  const handleDismissSuggestion = async (id: string) => {
+    const currentEntry = entryRef.current;
     dismissSuggestion(id);
-    apiClient.submitDecision(entry.id, entry.revision, id, 'dismissed');
+    const updated = await apiClient.submitDecision(
+      currentEntry.id,
+      currentEntry.revision,
+      id,
+      'dismissed'
+    );
+    if (updated) {
+      setEntry((prev) => ({
+        ...prev,
+        revision: updated.revision,
+        updatedAt: updated.updatedAt || new Date().toISOString(),
+      }));
+    }
   };
 
-  const handleAcceptAll = () => {
+  const handleAcceptAll = async () => {
     const pending = activeSuggestions.filter((s) => s.state === 'pending');
+    if (pending.length === 0) return;
+    const currentEntry = entryRef.current;
     acceptAllSuggestions();
-    pending.forEach((s) => {
-      apiClient.submitDecision(entry.id, entry.revision, s.id, 'accepted');
-    });
+    const decisions = pending.map((s) => ({
+      suggestionId: s.id,
+      action: 'accepted' as const,
+    }));
+    const updated = await apiClient.submitDecisions(
+      currentEntry.id,
+      currentEntry.revision,
+      decisions
+    );
+    if (updated) {
+      setEntry((prev) => ({
+        ...prev,
+        content: updated.content,
+        revision: updated.revision,
+        updatedAt: updated.updatedAt || new Date().toISOString(),
+      }));
+      setEntriesHistory((prev) => {
+        const filtered = prev.filter((e) => e.id !== updated.id);
+        const next = [{ ...prev.find((e) => e.id === updated.id), ...updated }, ...filtered];
+        localStorage.setItem(`journal_history_${sessionGuid}`, JSON.stringify(next));
+        return next;
+      });
+      localStorage.setItem(`journal_draft_${sessionGuid}`, JSON.stringify(updated));
+    }
   };
 
-  const handleDismissAll = () => {
+  const handleDismissAll = async () => {
     const pending = activeSuggestions.filter((s) => s.state === 'pending');
+    if (pending.length === 0) return;
+    const currentEntry = entryRef.current;
     dismissAllSuggestions();
-    pending.forEach((s) => {
-      apiClient.submitDecision(entry.id, entry.revision, s.id, 'dismissed');
-    });
+    const decisions = pending.map((s) => ({
+      suggestionId: s.id,
+      action: 'dismissed' as const,
+    }));
+    const updated = await apiClient.submitDecisions(
+      currentEntry.id,
+      currentEntry.revision,
+      decisions
+    );
+    if (updated) {
+      setEntry((prev) => ({
+        ...prev,
+        revision: updated.revision,
+        updatedAt: updated.updatedAt || new Date().toISOString(),
+      }));
+    }
   };
 
   // Action: Save Entry (Ctrl+S / Cmd+S)
@@ -234,6 +309,12 @@ export const App: React.FC = () => {
     if (!entry.content.trim()) return;
 
     const saved = await apiClient.saveEntry(entry);
+    setEntry((prev) => ({
+      ...prev,
+      id: saved.id,
+      revision: saved.revision,
+      updatedAt: saved.updatedAt,
+    }));
     setEntriesHistory((prev) => {
       const filtered = prev.filter((e) => e.id !== saved.id);
       const updated = [saved, ...filtered];
@@ -248,15 +329,22 @@ export const App: React.FC = () => {
 
     setIsLoading(true);
     const result = await apiClient.analyze(entry);
-    applyAnalysis(result, entry);
+    const currentEntry = {
+      ...entry,
+      revision: result.entryRevision ?? entry.revision,
+    };
+    if (result.entryRevision && result.entryRevision !== entry.revision) {
+      setEntry(currentEntry);
+    }
+    applyAnalysis(result, currentEntry);
     if (result.suggestions && result.suggestions.length > 0) {
       setIsSidePanelOpen(true);
     }
 
     // Sync analyzed entry to local history and web storage
     setEntriesHistory((prev) => {
-      const filtered = prev.filter((e) => e.id !== entry.id);
-      const updated = [{ ...entry, updatedAt: new Date().toISOString() }, ...filtered];
+      const filtered = prev.filter((e) => e.id !== currentEntry.id);
+      const updated = [{ ...currentEntry, updatedAt: new Date().toISOString() }, ...filtered];
       localStorage.setItem(`journal_history_${sessionGuid}`, JSON.stringify(updated));
       return updated;
     });
@@ -288,6 +376,10 @@ export const App: React.FC = () => {
       // Load corrections and mistake history for the selected entry
       try {
         const detail = await apiClient.fetchEntry(selected.id);
+        if (detail && detail.id && detail.content !== undefined) {
+          setEntry(detail);
+        }
+
         if (detail && detail.mistakesHistory && detail.mistakesHistory.length > 0) {
           const hydrated: ActiveSuggestion[] = detail.mistakesHistory.map((s) => ({
             ...s,
@@ -299,9 +391,9 @@ export const App: React.FC = () => {
           }));
           const latestAnalysis = detail.analyses?.[0] || {
             id: detail.activeAnalysisId || `analysis-${Date.now()}`,
-            entryId: detail.id,
-            entryRevision: detail.revision,
-            sourceText: detail.content,
+            entryId: detail.id || selected.id,
+            entryRevision: detail.revision || selected.revision,
+            sourceText: detail.content || selected.content,
             status: 'completed' as const,
             offsetEncoding: 'utf-16' as const,
             suggestions: detail.mistakesHistory,
@@ -368,7 +460,7 @@ export const App: React.FC = () => {
 
   // Calculate word count
   const wordCount = useMemo(() => {
-    const trimmed = entry.content.trim();
+    const trimmed = (entry.content || '').trim();
     return trimmed ? trimmed.split(/\s+/).length : 0;
   }, [entry.content]);
 
