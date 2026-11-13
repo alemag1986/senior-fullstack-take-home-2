@@ -106,7 +106,7 @@ export const SideReviewPanel: React.FC<SideReviewPanelProps> = ({
       const card = document.querySelector(
         `[data-testid="suggestion-card-${selectedSuggestionId}"]`
       );
-      card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      card?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
     }
   }, [selectedSuggestionId, isOpen]);
 

@@ -330,6 +330,7 @@ def test_analysis_all_candidates_rejected_fails_status(client: TestClient):
     assert len(data["suggestions"]) == 0
 
 
+
 def test_analysis_valid_empty_succeeds(client: TestClient):
     headers = {"X-Session-ID": "user-empty-valid"}
     client.post(
@@ -360,3 +361,85 @@ def test_analysis_valid_empty_succeeds(client: TestClient):
     assert data["status"] == "completed"
     assert data["errorCode"] is None
     assert len(data["suggestions"]) == 0
+
+
+def test_batch_decisions_acceptance(client: TestClient):
+    headers = {"X-Session-ID": "user-batch-decisions"}
+    # 1. Create Entry
+    client.post(
+        "/api/entries",
+        json={
+            "id": "entry-batch-1",
+            "title": "Batch Test",
+            "targetLanguage": "es",
+            "content": "Yo comer manzanas ayer.",
+        },
+        headers=headers,
+    )
+
+    # 2. Add Analysis with 2 suggestions
+    client.post(
+        "/api/analyses",
+        json={
+            "id": "analysis-batch-1",
+            "entryId": "entry-batch-1",
+            "entryRevision": 1,
+            "sourceText": "Yo comer manzanas ayer.",
+            "suggestions": [
+                {
+                    "id": "sug-b1",
+                    "category": "grammar_syntax",
+                    "ruleCode": "grammar.verb_tense",
+                    "kind": "correction",
+                    "startOffset": 3,
+                    "endOffset": 8,
+                    "originalText": "comer",
+                    "replacementText": "comí",
+                    "explanationTitle": "Pretérito",
+                    "explanationMessage": "Usa pretérito indefinido.",
+                },
+                {
+                    "id": "sug-b2",
+                    "category": "vocabulary_phrasing",
+                    "ruleCode": "vocabulary.word_choice",
+                    "kind": "improvement",
+                    "startOffset": 18,
+                    "endOffset": 23,
+                    "originalText": "ayer.",
+                    "replacementText": "antier.",
+                    "explanationTitle": "Vocabulario",
+                    "explanationMessage": "Palabra más precisa.",
+                },
+            ],
+        },
+        headers=headers,
+    )
+
+    # 3. Batch Decision: Accept both suggestions at once
+    res = client.post(
+        "/api/entries/entry-batch-1/decisions",
+        json={
+            "expectedRevision": 1,
+            "requestId": "req-batch-1",
+            "decisions": [
+                {"suggestionId": "sug-b1", "action": "accepted"},
+                {"suggestionId": "sug-b2", "action": "accepted"},
+            ],
+        },
+        headers=headers,
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["entry"]["content"] == "Yo comí manzanas antier."
+    assert data["entry"]["revision"] == 2
+    assert len(data["actions"]) == 2
+
+    # 4. Verify Entry history reflects both as accepted
+    entry_res = client.get("/api/entries/entry-batch-1", headers=headers)
+    assert entry_res.status_code == 200
+    entry_data = entry_res.json()
+    assert entry_data["content"] == "Yo comí manzanas antier."
+    assert len(entry_data["mistakesHistory"]) == 2
+    assert all(m["state"] == "accepted" for m in entry_data["mistakesHistory"])
+
+

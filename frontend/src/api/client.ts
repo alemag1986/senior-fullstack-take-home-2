@@ -45,11 +45,11 @@ export class JournalApiClient {
       const data = await response.json();
       return {
         id: data.id || `analysis-${Date.now()}`,
-        entryId: entry.id,
-        entryRevision: entry.revision,
-        sourceText: entry.content,
-        status: 'completed',
-        offsetEncoding: 'utf-16',
+        entryId: data.entryId || entry.id,
+        entryRevision: data.entryRevision ?? entry.revision,
+        sourceText: data.sourceText || entry.content,
+        status: data.status || 'completed',
+        offsetEncoding: data.offsetEncoding || 'utf-16',
         suggestions: data.suggestions || [],
         isMock: false,
       };
@@ -81,7 +81,8 @@ export class JournalApiClient {
       return {
         ...entry,
         id: saved.id || entry.id,
-        updatedAt: new Date().toISOString(),
+        revision: saved.revision ?? entry.revision,
+        updatedAt: saved.updatedAt || new Date().toISOString(),
       };
     } catch {
       // Offline local fallback
@@ -129,28 +130,50 @@ export class JournalApiClient {
     }
   }
 
-  async submitDecision(
+  async submitDecisions(
     entryId: string,
     expectedRevision: number,
-    suggestionId: string,
-    action: 'accepted' | 'dismissed'
-  ): Promise<void> {
+    decisions: Array<{ suggestionId: string; action: 'accepted' | 'dismissed' }>
+  ): Promise<JournalEntry | null> {
     try {
       const response = await fetch(`${API_BASE}/entries/${entryId}/decisions`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
           expectedRevision,
-          requestId: `req-${suggestionId}-${Date.now()}`,
-          decisions: [{ suggestionId, action }],
+          requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          decisions,
         }),
       });
       if (!response.ok) {
         throw new Error(`Decision submit failed: ${response.status}`);
       }
-    } catch {
-      // Graceful offline fallback
+      const data = await response.json();
+      if (data && data.entry) {
+        return {
+          id: data.entry.id,
+          title: data.entry.title,
+          targetLanguage: data.entry.targetLanguage,
+          content: data.entry.content,
+          revision: data.entry.revision,
+          createdAt: data.entry.createdAt,
+          updatedAt: data.entry.updatedAt,
+        };
+      }
+      return null;
+    } catch (err) {
+      console.error('Failed to submit decisions:', err);
+      return null;
     }
+  }
+
+  async submitDecision(
+    entryId: string,
+    expectedRevision: number,
+    suggestionId: string,
+    action: 'accepted' | 'dismissed'
+  ): Promise<JournalEntry | null> {
+    return this.submitDecisions(entryId, expectedRevision, [{ suggestionId, action }]);
   }
 
   async fetchInsights(): Promise<import('../types/journal').InsightsData | null> {
