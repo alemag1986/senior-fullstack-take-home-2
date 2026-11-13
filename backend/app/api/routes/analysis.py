@@ -30,6 +30,9 @@ def _now_iso() -> str:
 
 
 def row_to_suggestion_response(row: sqlite3.Row) -> SuggestionResponse:
+    keys = row.keys()
+    action = row["action"] if "action" in keys and row["action"] else "pending"
+    action_created_at = row["action_created_at"] if "action_created_at" in keys else None
     return SuggestionResponse(
         id=row["id"],
         analysisId=row["analysis_id"],
@@ -46,6 +49,8 @@ def row_to_suggestion_response(row: sqlite3.Row) -> SuggestionResponse:
             title=row["explanation_title"],
             message=row["explanation_message"],
         ),
+        state=action,
+        actionCreatedAt=action_created_at,
     )
 
 
@@ -232,7 +237,13 @@ def get_analysis(
     verify_entry_ownership(entry["user_id"], user_id)
 
     sug_cursor = conn.execute(
-        "SELECT * FROM suggestions WHERE analysis_id = ? ORDER BY start_offset ASC;",
+        """
+        SELECT s.*, sa.action, sa.created_at as action_created_at
+        FROM suggestions s
+        LEFT JOIN suggestion_actions sa ON s.id = sa.suggestion_id
+        WHERE s.analysis_id = ?
+        ORDER BY s.start_offset ASC;
+        """,
         (analysis_id,),
     )
     suggestions = [row_to_suggestion_response(r) for r in sug_cursor.fetchall()]

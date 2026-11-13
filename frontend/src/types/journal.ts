@@ -13,6 +13,10 @@ export interface JournalEntry {
   createdAt?: string;
   updatedAt?: string;
   deletedAt?: string;
+  activeAnalysisId?: string;
+  activeReviewRevision?: number;
+  analyses?: Analysis[];
+  mistakesHistory?: Suggestion[];
 }
 
 export interface SuggestionEdit {
@@ -29,11 +33,14 @@ export interface SuggestionExplanation {
 
 export interface Suggestion {
   id: string;
+  analysisId?: string;
   category: FeedbackCategory;
   ruleCode: string;
   kind: SuggestionKind;
   edit: SuggestionEdit;
   explanation: SuggestionExplanation;
+  state?: SuggestionState;
+  actionCreatedAt?: string;
 }
 
 export interface Analysis {

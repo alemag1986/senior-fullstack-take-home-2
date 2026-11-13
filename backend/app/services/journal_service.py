@@ -5,10 +5,20 @@ from typing import List, Optional
 from backend.app.core.config import settings
 from backend.app.core.errors import AppError
 from backend.app.core.security import verify_entry_ownership
+from backend.app.models.enums import (
+    AnalysisStatus,
+    FeedbackCategory,
+    OffsetEncoding,
+    SuggestionKind,
+)
 from backend.app.models.schemas import (
+    AnalysisResponse,
     EntryDeleteResponse,
     JournalEntryCreateOrUpdate,
     JournalEntryResponse,
+    SuggestionEdit,
+    SuggestionExplanation,
+    SuggestionResponse,
 )
 from backend.app.services.utf16 import utf16_len
 
@@ -17,9 +27,15 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def row_to_entry_response(row: sqlite3.Row) -> JournalEntryResponse:
+def row_to_entry_response(
+    row: sqlite3.Row,
+    analyses: Optional[List[AnalysisResponse]] = None,
+    mistakes_history: Optional[List[SuggestionResponse]] = None,
+) -> JournalEntryResponse:
     keys = row.keys()
     deleted_at = row["deleted_at"] if "deleted_at" in keys else None
+    active_analysis_id = row["active_analysis_id"] if "active_analysis_id" in keys else None
+    active_review_revision = row["active_review_revision"] if "active_review_revision" in keys else None
     return JournalEntryResponse(
         id=row["id"],
         userId=row["user_id"],
@@ -31,7 +47,81 @@ def row_to_entry_response(row: sqlite3.Row) -> JournalEntryResponse:
         createdAt=row["created_at"],
         updatedAt=row["updated_at"],
         deletedAt=deleted_at,
+        activeAnalysisId=active_analysis_id,
+        activeReviewRevision=active_review_revision,
+        analyses=analyses or [],
+        mistakesHistory=mistakes_history or [],
     )
+
+
+def get_entry_analyses_and_mistakes(
+    conn: sqlite3.Connection, entry_id: str
+) -> tuple[List[AnalysisResponse], List[SuggestionResponse]]:
+    ana_cursor = conn.execute(
+        "SELECT * FROM analyses WHERE entry_id = ? ORDER BY created_at DESC;",
+        (entry_id,),
+    )
+    analyses_rows = ana_cursor.fetchall()
+    analyses: List[AnalysisResponse] = []
+    mistakes_history: List[SuggestionResponse] = []
+
+    for a_row in analyses_rows:
+        analysis_id = a_row["id"]
+        sug_cursor = conn.execute(
+            """
+            SELECT s.*, sa.action, sa.created_at as action_created_at
+            FROM suggestions s
+            LEFT JOIN suggestion_actions sa ON s.id = sa.suggestion_id
+            WHERE s.analysis_id = ?
+            ORDER BY s.start_offset ASC;
+            """,
+            (analysis_id,),
+        )
+        sug_rows = sug_cursor.fetchall()
+        suggestions: List[SuggestionResponse] = []
+        for s in sug_rows:
+            action = s["action"] if "action" in s.keys() and s["action"] else "pending"
+            action_created_at = s["action_created_at"] if "action_created_at" in s.keys() else None
+            sug_dto = SuggestionResponse(
+                id=s["id"],
+                analysisId=s["analysis_id"],
+                category=FeedbackCategory(s["category"]),
+                ruleCode=s["rule_code"],
+                kind=SuggestionKind(s["kind"]),
+                edit=SuggestionEdit(
+                    start=s["start_offset"],
+                    end=s["end_offset"],
+                    original=s["original_text"],
+                    replacement=s["replacement_text"],
+                ),
+                explanation=SuggestionExplanation(
+                    title=s["explanation_title"],
+                    message=s["explanation_message"],
+                ),
+                state=action,
+                actionCreatedAt=action_created_at,
+            )
+            suggestions.append(sug_dto)
+            mistakes_history.append(sug_dto)
+
+        analyses.append(
+            AnalysisResponse(
+                id=a_row["id"],
+                entryId=a_row["entry_id"],
+                entryRevision=a_row["entry_revision"],
+                sourceText=a_row["source_text"],
+                status=AnalysisStatus(a_row["status"]),
+                offsetEncoding=OffsetEncoding(a_row["offset_encoding"]),
+                taxonomyVersion=a_row["taxonomy_version"],
+                modelVersion=a_row["model_version"],
+                promptVersion=a_row["prompt_version"],
+                errorCode=a_row["error_code"],
+                createdAt=a_row["created_at"],
+                completedAt=a_row["completed_at"],
+                suggestions=suggestions,
+            )
+        )
+    return analyses, mistakes_history
 
 
 def get_entry_row(conn: sqlite3.Connection, entry_id: str) -> Optional[sqlite3.Row]:
@@ -46,6 +136,7 @@ def get_entry(
     entry_id: str,
     user_id: str,
     include_deleted: bool = False,
+    include_history: bool = True,
 ) -> JournalEntryResponse:
     row = get_entry_row(conn, entry_id)
     if not row:
@@ -61,6 +152,11 @@ def get_entry(
             message=f"Journal entry '{entry_id}' not found.",
             status_code=404,
         )
+
+    if include_history:
+        analyses, mistakes_history = get_entry_analyses_and_mistakes(conn, entry_id)
+        return row_to_entry_response(row, analyses=analyses, mistakes_history=mistakes_history)
+
     return row_to_entry_response(row)
 
 

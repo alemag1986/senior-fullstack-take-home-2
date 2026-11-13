@@ -320,4 +320,133 @@ describe('SideReviewPanel & SuggestionCard', () => {
       expect(onToggle).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('History of Changes & Accepted Mistake Visibility', () => {
+    const mixedSuggestions: ActiveSuggestion[] = [
+      {
+        id: 's-acc-1',
+        category: 'grammar_syntax',
+        kind: 'correction',
+        ruleCode: 'G_VERB',
+        state: 'accepted',
+        activeRange: { start: 3, end: 8 },
+        edit: { start: 3, end: 8, original: 'comer', replacement: 'comí' },
+        explanation: { title: 'Preterite Tense', message: 'Use past preterite.' },
+      },
+      {
+        id: 's-pend-2',
+        category: 'vocabulary_phrasing',
+        kind: 'improvement',
+        ruleCode: 'V_WORD',
+        state: 'pending',
+        activeRange: { start: 15, end: 20 },
+        edit: { start: 15, end: 20, original: 'calor', replacement: 'caliente' },
+        explanation: { title: 'Word Choice', message: 'Use caliente for food.' },
+      },
+      {
+        id: 's-dism-3',
+        category: 'spelling_accents',
+        kind: 'correction',
+        ruleCode: 'S_ACCENT',
+        state: 'dismissed',
+        activeRange: { start: 25, end: 32 },
+        edit: { start: 25, end: 32, original: 'manana', replacement: 'mañana' },
+        explanation: { title: 'Missing Tilde', message: 'Needs tilde over n.' },
+      },
+    ];
+
+    it('displays status filter tabs and retains accepted mistakes on screen', () => {
+      render(
+        <SideReviewPanel
+          isOpen={true}
+          onClose={vi.fn()}
+          activeSuggestions={mixedSuggestions}
+          selectedSuggestionId={null}
+          content="Yo comí mucha calor esta manana."
+          isStale={false}
+          onSelectSuggestion={vi.fn()}
+          onAcceptSuggestion={vi.fn()}
+          onDismissSuggestion={vi.fn()}
+          onAcceptAll={vi.fn()}
+          onDismissAll={vi.fn()}
+          onReviewAgain={vi.fn()}
+        />
+      );
+
+      // Verify header counts: 1 pending, 1 accepted
+      expect(screen.getByTestId('pending-count-badge')).toHaveTextContent('1');
+      expect(screen.getByTestId('accepted-count-badge')).toHaveTextContent('1 accepted');
+
+      // Verify status filter buttons
+      expect(screen.getByTestId('filter-status-all')).toHaveTextContent('All (3)');
+      expect(screen.getByTestId('filter-status-pending')).toHaveTextContent('Pending (1)');
+      expect(screen.getByTestId('filter-status-accepted')).toHaveTextContent('Accepted (1)');
+      expect(screen.getByTestId('filter-status-dismissed')).toHaveTextContent('Dismissed (1)');
+
+      // On 'All' view, accepted card is rendered and displays original mistake and explanation
+      expect(screen.getByTestId('suggestion-card-s-acc-1')).toBeInTheDocument();
+      expect(screen.getByTestId('badge-status-accepted-s-acc-1')).toHaveTextContent('✓ Accepted');
+      expect(screen.getByTestId('accepted-badge-s-acc-1')).toHaveTextContent('✓ Applied');
+      expect(screen.getByText('Preterite Tense')).toBeInTheDocument();
+      expect(screen.getByText('comer')).toBeInTheDocument();
+      expect(screen.getByText('comí')).toBeInTheDocument();
+
+      // Accepted card does not show Accept / Dismiss buttons
+      expect(screen.queryByTestId('accept-btn-s-acc-1')).toBeNull();
+      expect(screen.queryByTestId('dismiss-btn-s-acc-1')).toBeNull();
+
+      // Filter by Accepted only
+      fireEvent.click(screen.getByTestId('filter-status-accepted'));
+      expect(screen.getByTestId('suggestion-card-s-acc-1')).toBeInTheDocument();
+      expect(screen.queryByTestId('suggestion-card-s-pend-2')).toBeNull();
+      expect(screen.queryByTestId('suggestion-card-s-dism-3')).toBeNull();
+
+      // Filter by Pending only
+      fireEvent.click(screen.getByTestId('filter-status-pending'));
+      expect(screen.queryByTestId('suggestion-card-s-acc-1')).toBeNull();
+      expect(screen.getByTestId('suggestion-card-s-pend-2')).toBeInTheDocument();
+    });
+
+    it('shows all-accepted banner when all suggestions are accepted, keeping mistake cards visible', () => {
+      const allAcceptedSuggestions: ActiveSuggestion[] = [
+        {
+          id: 's-acc-only-1',
+          category: 'grammar_syntax',
+          kind: 'correction',
+          ruleCode: 'G_VERB',
+          state: 'accepted',
+          activeRange: { start: 0, end: 4 },
+          edit: { start: 0, end: 4, original: 'hace', replacement: 'hizo' },
+          explanation: { title: 'Past Agreement', message: 'Subject requires third person preterite.' },
+        },
+      ];
+
+      render(
+        <SideReviewPanel
+          isOpen={true}
+          onClose={vi.fn()}
+          activeSuggestions={allAcceptedSuggestions}
+          selectedSuggestionId={null}
+          content="hizo buen tiempo."
+          isStale={false}
+          onSelectSuggestion={vi.fn()}
+          onAcceptSuggestion={vi.fn()}
+          onDismissSuggestion={vi.fn()}
+          onAcceptAll={vi.fn()}
+          onDismissAll={vi.fn()}
+          onReviewAgain={vi.fn()}
+        />
+      );
+
+      // Banner should be visible
+      expect(screen.getByTestId('all-accepted-banner')).toBeInTheDocument();
+      expect(screen.getByText('All corrections applied!')).toBeInTheDocument();
+
+      // Mistake card is still visible for the learner to review
+      expect(screen.getByTestId('suggestion-card-s-acc-only-1')).toBeInTheDocument();
+      expect(screen.getByText('Past Agreement')).toBeInTheDocument();
+      expect(screen.getByText('hace')).toBeInTheDocument();
+      expect(screen.getByText('hizo')).toBeInTheDocument();
+    });
+  });
 });

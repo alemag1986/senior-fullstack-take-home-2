@@ -175,6 +175,7 @@ export const App: React.FC = () => {
   const {
     analysis,
     activeSuggestions,
+    reviewHistory,
     isStale,
     isLoading,
     error,
@@ -187,6 +188,8 @@ export const App: React.FC = () => {
     acceptAllSuggestions,
     dismissAllSuggestions,
     notifyManualEdit,
+    hydrateSuggestions,
+    clearAnalysis,
   } = useSuggestions(entry, handleUpdateContent);
 
   // User typing in editor canvas
@@ -271,15 +274,49 @@ export const App: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
     setEntry(fresh);
+    clearAnalysis();
     setSelectedSuggestionId(null);
     setIsSidePanelOpen(false);
-  }, [activeLanguageCode, setSelectedSuggestionId]);
+  }, [activeLanguageCode, clearAnalysis, setSelectedSuggestionId]);
 
   // Action: Select Past Entry from History
-  const handleSelectEntry = useCallback((selected: JournalEntry) => {
-    setEntry(selected);
-    setSelectedSuggestionId(null);
-  }, [setSelectedSuggestionId]);
+  const handleSelectEntry = useCallback(
+    async (selected: JournalEntry) => {
+      setEntry(selected);
+      setSelectedSuggestionId(null);
+
+      // Load corrections and mistake history for the selected entry
+      try {
+        const detail = await apiClient.fetchEntry(selected.id);
+        if (detail && detail.mistakesHistory && detail.mistakesHistory.length > 0) {
+          const hydrated: ActiveSuggestion[] = detail.mistakesHistory.map((s) => ({
+            ...s,
+            state: s.state || 'accepted',
+            activeRange: {
+              start: s.edit.start,
+              end: s.edit.end,
+            },
+          }));
+          const latestAnalysis = detail.analyses?.[0] || {
+            id: detail.activeAnalysisId || `analysis-${Date.now()}`,
+            entryId: detail.id,
+            entryRevision: detail.revision,
+            sourceText: detail.content,
+            status: 'completed' as const,
+            offsetEncoding: 'utf-16' as const,
+            suggestions: detail.mistakesHistory,
+          };
+          hydrateSuggestions(hydrated, latestAnalysis);
+          setIsSidePanelOpen(true);
+        } else {
+          clearAnalysis();
+        }
+      } catch {
+        clearAnalysis();
+      }
+    },
+    [apiClient, hydrateSuggestions, clearAnalysis, setSelectedSuggestionId]
+  );
 
   // Action: Remove / Soft Delete Entry
   const handleDeleteEntry = useCallback(
@@ -311,7 +348,7 @@ export const App: React.FC = () => {
     // onOpenInsights: () => setIsInsightsOpen(true),
     onToggleReviewPanel: () => setIsSidePanelOpen((prev) => !prev),
     onToggleCompare: () => {
-      if (!isStale && activeSuggestions.length > 0) {
+      if (!isStale && (activeSuggestions.length > 0 || reviewHistory.length > 0)) {
         setIsCompareOpen((prev) => !prev);
       }
     },
@@ -358,6 +395,7 @@ export const App: React.FC = () => {
         isOpen={isSidePanelOpen}
         onClose={() => setIsSidePanelOpen(false)}
         activeSuggestions={activeSuggestions}
+        mistakesHistory={reviewHistory}
         selectedSuggestionId={selectedSuggestionId}
         content={entry.content}
         isStale={isStale}
@@ -380,7 +418,9 @@ export const App: React.FC = () => {
         error={error}
         isMock={analysis?.isMock}
         pendingSuggestionsCount={
-          activeSuggestions.filter((s) => s.state === 'pending').length
+          (activeSuggestions.length > 0 ? activeSuggestions : reviewHistory).filter(
+            (s) => s.state === 'pending'
+          ).length
         }
         isSidePanelOpen={isSidePanelOpen}
         onToggleSidePanel={() => setIsSidePanelOpen((prev) => !prev)}
@@ -395,7 +435,8 @@ export const App: React.FC = () => {
       {isCompareOpen && (
         <VersionCompare
           currentText={entry.content}
-          activeSuggestions={activeSuggestions}
+          originalText={analysis?.sourceText}
+          activeSuggestions={activeSuggestions.length > 0 ? activeSuggestions : reviewHistory}
           isStale={isStale}
           onClose={() => setIsCompareOpen(false)}
         />

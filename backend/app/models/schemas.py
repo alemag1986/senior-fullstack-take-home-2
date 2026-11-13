@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import List, Optional
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from backend.app.models.enums import (
@@ -38,6 +39,10 @@ class SuggestionResponse(BaseSchema):
     kind: SuggestionKind
     edit: SuggestionEdit
     explanation: SuggestionExplanation
+    state: str = "pending"
+    actionCreatedAt: Optional[str] = Field(
+        None, validation_alias=AliasChoices("actionCreatedAt", "action_created_at")
+    )
 
 
 class SuggestionCreateInput(BaseSchema):
@@ -108,6 +113,17 @@ class JournalEntryResponse(BaseSchema):
     )
     deletedAt: Optional[str] = Field(
         None, validation_alias=AliasChoices("deletedAt", "deleted_at")
+    )
+    activeAnalysisId: Optional[str] = Field(
+        None, validation_alias=AliasChoices("activeAnalysisId", "active_analysis_id")
+    )
+    activeReviewRevision: Optional[int] = Field(
+        None, validation_alias=AliasChoices("activeReviewRevision", "active_review_revision")
+    )
+    analyses: List[AnalysisResponse] = []
+    mistakesHistory: List[SuggestionResponse] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("mistakesHistory", "mistakes_history"),
     )
 
 

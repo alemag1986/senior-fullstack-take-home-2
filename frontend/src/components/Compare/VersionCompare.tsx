@@ -7,6 +7,7 @@ interface VersionCompareProps {
   activeSuggestions: ActiveSuggestion[];
   isStale: boolean;
   onClose: () => void;
+  originalText?: string;
 }
 
 export const VersionCompare: React.FC<VersionCompareProps> = ({
@@ -14,16 +15,19 @@ export const VersionCompare: React.FC<VersionCompareProps> = ({
   activeSuggestions,
   isStale,
   onClose,
+  originalText,
 }) => {
   // Derive corrected version by applying pending valid suggestions right-to-left
   const proposedText = useMemo(() => {
     return deriveProposedText(currentText, activeSuggestions);
   }, [currentText, activeSuggestions]);
 
-  // Compute word-level diff
+  const baseText = originalText || currentText;
+
+  // Compute word-level diff against original or current text
   const diffParts = useMemo(() => {
-    return computeWordDiff(currentText, proposedText);
-  }, [currentText, proposedText]);
+    return computeWordDiff(baseText, proposedText);
+  }, [baseText, proposedText]);
 
   if (isStale) {
     return (
@@ -72,20 +76,24 @@ export const VersionCompare: React.FC<VersionCompareProps> = ({
 
       {/* Side-by-side or stacked panels */}
       <div className="flex-1 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-zinc-200 dark:divide-zinc-800 overflow-y-auto">
-        {/* Left: Current Draft */}
+        {/* Left: Original or Current Draft */}
         <div className="p-6 md:p-8 overflow-y-auto">
           <div className="text-xs uppercase tracking-wider font-semibold text-zinc-400 mb-4 select-none">
-            Current Draft
+            {originalText && originalText !== currentText
+              ? 'Original Draft (Before Corrections)'
+              : 'Current Draft'}
           </div>
           <div className="whitespace-pre-wrap leading-relaxed text-zinc-800 dark:text-zinc-200">
-            {currentText}
+            {baseText}
           </div>
         </div>
 
-        {/* Right: Proposed Corrected Version with Diff Highlighting */}
+        {/* Right: Proposed / Corrected Version with Diff Highlighting */}
         <div className="p-6 md:p-8 overflow-y-auto bg-zinc-50/50 dark:bg-zinc-900/30">
           <div className="text-xs uppercase tracking-wider font-semibold text-zinc-400 mb-4 select-none">
-            Proposed Corrected Version
+            {originalText && originalText !== currentText
+              ? 'Revised Version (with Corrections)'
+              : 'Proposed Corrected Version'}
           </div>
           <div className="whitespace-pre-wrap leading-relaxed text-zinc-800 dark:text-zinc-200">
             {diffParts.map((part: DiffPart, idx: number) => {

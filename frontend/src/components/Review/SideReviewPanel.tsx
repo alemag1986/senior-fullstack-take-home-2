@@ -15,9 +15,11 @@ export interface SideReviewPanelProps {
   onAcceptAll: () => void;
   onDismissAll: () => void;
   onReviewAgain: () => void;
+  mistakesHistory?: ActiveSuggestion[];
 }
 
 type FilterCategory = 'all' | FeedbackCategory;
+type FilterStatus = 'all' | 'pending' | 'accepted' | 'dismissed';
 
 export const SideReviewPanel: React.FC<SideReviewPanelProps> = ({
   isOpen,
@@ -32,34 +34,71 @@ export const SideReviewPanel: React.FC<SideReviewPanelProps> = ({
   onAcceptAll,
   onDismissAll,
   onReviewAgain,
+  mistakesHistory,
 }) => {
+  const [selectedStatus, setSelectedStatus] = useState<FilterStatus>('all');
   const [selectedCategory, setSelectedCategory] = useState<FilterCategory>('all');
 
-  // Filter to pending suggestions
+  // Combine active suggestions with mistakes history if needed
+  const allSuggestions = useMemo(() => {
+    if (activeSuggestions && activeSuggestions.length > 0) {
+      return activeSuggestions;
+    }
+    if (mistakesHistory && mistakesHistory.length > 0) {
+      return mistakesHistory;
+    }
+    return [];
+  }, [activeSuggestions, mistakesHistory]);
+
+  // Breakdown by suggestion state
   const pendingSuggestions = useMemo(
-    () => activeSuggestions.filter((s) => s.state === 'pending'),
-    [activeSuggestions]
+    () => allSuggestions.filter((s) => s.state === 'pending'),
+    [allSuggestions]
   );
+  const acceptedSuggestions = useMemo(
+    () => allSuggestions.filter((s) => s.state === 'accepted'),
+    [allSuggestions]
+  );
+  const dismissedSuggestions = useMemo(
+    () => allSuggestions.filter((s) => s.state === 'dismissed'),
+    [allSuggestions]
+  );
+
+  // Status-filtered suggestions
+  const statusFiltered = useMemo(() => {
+    switch (selectedStatus) {
+      case 'pending':
+        return pendingSuggestions;
+      case 'accepted':
+        return acceptedSuggestions;
+      case 'dismissed':
+        return dismissedSuggestions;
+      case 'all':
+      default:
+        return allSuggestions;
+    }
+  }, [allSuggestions, pendingSuggestions, acceptedSuggestions, dismissedSuggestions, selectedStatus]);
 
   // Category counts
   const counts = useMemo(() => {
+    const base = selectedStatus === 'all' ? allSuggestions : statusFiltered;
     const res = {
-      all: pendingSuggestions.length,
+      all: base.length,
       grammar_syntax: 0,
       vocabulary_phrasing: 0,
       spelling_accents: 0,
     };
-    pendingSuggestions.forEach((s) => {
+    base.forEach((s) => {
       res[s.category] = (res[s.category] || 0) + 1;
     });
     return res;
-  }, [pendingSuggestions]);
+  }, [allSuggestions, statusFiltered, selectedStatus]);
 
-  // Filtered list
+  // Filtered list by both status and category
   const filteredSuggestions = useMemo(() => {
-    if (selectedCategory === 'all') return pendingSuggestions;
-    return pendingSuggestions.filter((s) => s.category === selectedCategory);
-  }, [pendingSuggestions, selectedCategory]);
+    if (selectedCategory === 'all') return statusFiltered;
+    return statusFiltered.filter((s) => s.category === selectedCategory);
+  }, [statusFiltered, selectedCategory]);
 
   // Auto-scroll the active card into view in the side panel
   useEffect(() => {
@@ -88,12 +127,22 @@ export const SideReviewPanel: React.FC<SideReviewPanelProps> = ({
             <span
               data-testid="pending-count-badge"
               className="text-xs px-2 py-0.5 rounded-full font-mono font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
+              title={`${pendingSuggestions.length} pending correction${pendingSuggestions.length !== 1 ? 's' : ''}`}
             >
               {pendingSuggestions.length}
             </span>
+            {acceptedSuggestions.length > 0 && (
+              <span
+                data-testid="accepted-count-badge"
+                className="text-xs px-2 py-0.5 rounded-full font-mono font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
+                title={`${acceptedSuggestions.length} accepted mistake${acceptedSuggestions.length !== 1 ? 's' : ''}`}
+              >
+                {acceptedSuggestions.length} accepted
+              </span>
+            )}
           </div>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Click reference to jump to editor position
+            History of changes & AI review explanations
           </p>
         </div>
 
@@ -127,6 +176,65 @@ export const SideReviewPanel: React.FC<SideReviewPanelProps> = ({
           </button>
         </div>
       )}
+
+      {/* Status Filter Tabs (Review & Mistake History) */}
+      <div className="px-3 py-1.5 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-xs font-medium bg-zinc-50/70 dark:bg-zinc-950/50 shrink-0">
+        <span className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+          State:
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            data-testid="filter-status-all"
+            onClick={() => setSelectedStatus('all')}
+            className={`px-2 py-0.5 rounded-md transition-colors ${
+              selectedStatus === 'all'
+                ? 'bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-xs'
+                : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/60 dark:hover:bg-zinc-800'
+            }`}
+          >
+            All ({allSuggestions.length})
+          </button>
+          <button
+            type="button"
+            data-testid="filter-status-pending"
+            onClick={() => setSelectedStatus('pending')}
+            className={`px-2 py-0.5 rounded-md transition-colors ${
+              selectedStatus === 'pending'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/60 dark:hover:bg-zinc-800'
+            }`}
+          >
+            Pending ({pendingSuggestions.length})
+          </button>
+          <button
+            type="button"
+            data-testid="filter-status-accepted"
+            onClick={() => setSelectedStatus('accepted')}
+            className={`px-2 py-0.5 rounded-md transition-colors ${
+              selectedStatus === 'accepted'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/60 dark:hover:bg-zinc-800'
+            }`}
+          >
+            Accepted ({acceptedSuggestions.length})
+          </button>
+          {dismissedSuggestions.length > 0 && (
+            <button
+              type="button"
+              data-testid="filter-status-dismissed"
+              onClick={() => setSelectedStatus('dismissed')}
+              className={`px-2 py-0.5 rounded-md transition-colors ${
+                selectedStatus === 'dismissed'
+                  ? 'bg-zinc-600 text-white shadow-xs'
+                  : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/60 dark:hover:bg-zinc-800'
+              }`}
+            >
+              Dismissed ({dismissedSuggestions.length})
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Category Filter Tabs */}
       <div className="p-2 border-b border-zinc-100 dark:border-zinc-800/80 flex items-center gap-1 overflow-x-auto shrink-0 bg-white dark:bg-zinc-900 text-xs font-medium">
@@ -207,6 +315,24 @@ export const SideReviewPanel: React.FC<SideReviewPanelProps> = ({
 
       {/* Cards Scroll Container */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {/* All Accepted Banner when all corrections applied */}
+        {pendingSuggestions.length === 0 && acceptedSuggestions.length > 0 && selectedStatus !== 'pending' && (
+          <div
+            data-testid="all-accepted-banner"
+            className="p-3 mb-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 text-emerald-800 dark:text-emerald-200 text-xs flex items-center gap-2.5"
+          >
+            <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">✓</span>
+            <div>
+              <p className="font-semibold text-emerald-900 dark:text-emerald-100">
+                All corrections applied!
+              </p>
+              <p className="text-[11px] opacity-90 mt-0.5">
+                Review your accepted mistakes below to reinforce grammar and vocabulary.
+              </p>
+            </div>
+          </div>
+        )}
+
         {filteredSuggestions.length === 0 ? (
           <div
             data-testid="panel-empty-state"
@@ -216,13 +342,17 @@ export const SideReviewPanel: React.FC<SideReviewPanelProps> = ({
               ✓
             </div>
             <p className="font-medium text-sm text-zinc-700 dark:text-zinc-300">
-              {pendingSuggestions.length === 0
+              {allSuggestions.length === 0
                 ? 'No suggestions found'
+                : selectedStatus === 'pending' && acceptedSuggestions.length > 0
+                ? 'All pending suggestions applied'
                 : 'No suggestions in this category'}
             </p>
             <p className="text-xs mt-1 text-zinc-500 dark:text-zinc-400 max-w-xs">
-              {pendingSuggestions.length === 0
+              {allSuggestions.length === 0
                 ? 'Your text looks great or all suggestions have been addressed.'
+                : selectedStatus === 'pending' && acceptedSuggestions.length > 0
+                ? 'Click the "Accepted" or "All" tab above to review your mistake history.'
                 : 'Switch tabs or run review again to see other suggestions.'}
             </p>
           </div>

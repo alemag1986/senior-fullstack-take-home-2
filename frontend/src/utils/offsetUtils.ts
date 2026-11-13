@@ -105,6 +105,10 @@ export function applySuggestion(
       updatedSuggestions.push({
         ...s,
         state: 'accepted',
+        activeRange: {
+          start,
+          end: start + replacement.length,
+        },
       });
       continue;
     }

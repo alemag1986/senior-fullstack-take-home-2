@@ -77,10 +77,14 @@ export const SuggestionCard: React.FC<SuggestionCardProps> = ({
       className={`p-3.5 rounded-xl border transition-all duration-200 cursor-pointer ${
         isSelected
           ? 'bg-blue-50/70 dark:bg-blue-950/40 border-blue-400 dark:border-blue-500 shadow-md ring-1 ring-blue-400 dark:ring-blue-500'
+          : suggestion.state === 'accepted'
+          ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/60 hover:border-emerald-400 hover:shadow-xs'
+          : suggestion.state === 'dismissed'
+          ? 'bg-zinc-50/60 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 opacity-70 hover:opacity-100 hover:shadow-xs'
           : 'bg-white dark:bg-zinc-900/90 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-xs'
       }`}
     >
-      {/* Header: Reference #, Category, Location, Jump icon */}
+      {/* Header: Reference #, Category, Status, Location, Jump icon */}
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="font-mono text-xs font-semibold text-zinc-500 dark:text-zinc-400">
@@ -91,6 +95,22 @@ export const SuggestionCard: React.FC<SuggestionCardProps> = ({
           >
             {badge.label}
           </span>
+          {suggestion.state === 'accepted' && (
+            <span
+              data-testid={`badge-status-accepted-${suggestion.id}`}
+              className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+            >
+              ✓ Accepted
+            </span>
+          )}
+          {suggestion.state === 'dismissed' && (
+            <span
+              data-testid={`badge-status-dismissed-${suggestion.id}`}
+              className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700"
+            >
+              Dismissed
+            </span>
+          )}
           <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500">
             Ln {line}, Col {col}
           </span>
@@ -148,35 +168,51 @@ export const SuggestionCard: React.FC<SuggestionCardProps> = ({
         </p>
       </div>
 
-      {/* Actions */}
+      {/* Actions / Status */}
       <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-100 dark:border-zinc-800/70">
         <span className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500 uppercase">
           {suggestion.ruleCode}
         </span>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            data-testid={`dismiss-btn-${suggestion.id}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDismiss(suggestion.id);
-            }}
-            className="px-2.5 py-1 text-xs font-medium rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+        {suggestion.state === 'accepted' ? (
+          <span
+            data-testid={`accepted-badge-${suggestion.id}`}
+            className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1 bg-emerald-100/80 dark:bg-emerald-950/70 px-2 py-0.5 rounded-md"
           >
-            Dismiss
-          </button>
-          <button
-            type="button"
-            data-testid={`accept-btn-${suggestion.id}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onAccept(suggestion.id);
-            }}
-            className="px-3 py-1 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-xs transition-colors"
+            ✓ Applied
+          </span>
+        ) : suggestion.state === 'dismissed' ? (
+          <span
+            data-testid={`dismissed-badge-${suggestion.id}`}
+            className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-md"
           >
-            Accept
-          </button>
-        </div>
+            Dismissed
+          </span>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              data-testid={`dismiss-btn-${suggestion.id}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDismiss(suggestion.id);
+              }}
+              className="px-2.5 py-1 text-xs font-medium rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            >
+              Dismiss
+            </button>
+            <button
+              type="button"
+              data-testid={`accept-btn-${suggestion.id}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onAccept(suggestion.id);
+              }}
+              className="px-3 py-1 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-xs transition-colors"
+            >
+              Accept
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

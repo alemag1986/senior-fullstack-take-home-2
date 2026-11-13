@@ -104,6 +104,18 @@ export class JournalApiClient {
     }
   }
 
+  async fetchEntry(entryId: string): Promise<JournalEntry | null> {
+    try {
+      const response = await fetch(`${API_BASE}/entries/${entryId}`, {
+        headers: this.getHeaders(),
+      });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch {
+      return null;
+    }
+  }
+
   async deleteEntry(entryId: string): Promise<boolean> {
     try {
       const response = await fetch(`${API_BASE}/entries/${entryId}`, {

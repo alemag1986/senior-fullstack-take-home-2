@@ -217,3 +217,72 @@ def test_soft_delete_unauthorized_user(client: TestClient):
     del_res = client.delete(f"/api/entries/{entry_id}", headers=headers_user_b)
     assert del_res.status_code == 403
 
+
+def test_entry_history_retains_mistakes_when_accepted_or_dismissed(client: TestClient):
+    headers = {"X-Session-ID": "user-history-test"}
+
+    # 1. Create and analyze entry
+    analyze_payload = {
+        "title": "Mi viaje",
+        "targetLanguage": "es",
+        "content": "Yo comer mucho caliente esta manana.",
+    }
+    ana_res = client.post("/api/entries/analyze", json=analyze_payload, headers=headers)
+    assert ana_res.status_code == 200
+    ana_data = ana_res.json()
+    entry_id = ana_data["entryId"]
+    suggestions = ana_data["suggestions"]
+    assert len(suggestions) >= 2
+
+    sug1_id = suggestions[0]["id"]
+    sug2_id = suggestions[1]["id"]
+
+    # 2. Accept sug1
+    dec_res = client.post(
+        f"/api/entries/{entry_id}/decisions",
+        json={
+            "expectedRevision": 1,
+            "requestId": "req-hist-1",
+            "decisions": [{"suggestionId": sug1_id, "action": "accepted"}],
+        },
+        headers=headers,
+    )
+    assert dec_res.status_code == 200
+
+    # 3. Dismiss sug2
+    dec_res_2 = client.post(
+        f"/api/entries/{entry_id}/decisions",
+        json={
+            "expectedRevision": 2,
+            "requestId": "req-hist-2",
+            "decisions": [{"suggestionId": sug2_id, "action": "dismissed"}],
+        },
+        headers=headers,
+    )
+    assert dec_res_2.status_code == 200
+
+    # 4. Fetch entry history via GET /api/entries/{entry_id}
+    get_res = client.get(f"/api/entries/{entry_id}", headers=headers)
+    assert get_res.status_code == 200
+    entry_detail = get_res.json()
+
+    assert "mistakesHistory" in entry_detail
+    mistakes = entry_detail["mistakesHistory"]
+    assert len(mistakes) >= 2
+
+    m1 = next((m for m in mistakes if m["id"] == sug1_id), None)
+    assert m1 is not None
+    assert m1["state"] == "accepted"
+    assert m1["edit"]["original"] == suggestions[0]["edit"]["original"]
+    assert m1["edit"]["replacement"] == suggestions[0]["edit"]["replacement"]
+    assert m1["explanation"]["title"] != ""
+
+    m2 = next((m for m in mistakes if m["id"] == sug2_id), None)
+    assert m2 is not None
+    assert m2["state"] == "dismissed"
+
+    # Also verify GET /api/entries/{entry_id}/history endpoint
+    hist_res = client.get(f"/api/entries/{entry_id}/history", headers=headers)
+    assert hist_res.status_code == 200
+    assert len(hist_res.json()["mistakesHistory"]) >= 2
+

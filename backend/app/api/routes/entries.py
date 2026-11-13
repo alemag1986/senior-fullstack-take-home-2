@@ -206,8 +206,18 @@ def get_single_entry(
     user_id: str = Depends(get_authenticated_user_id),
     conn: sqlite3.Connection = Depends(get_db_conn),
 ) -> JournalEntryResponse:
-    """Retrieves an entry by its ID, enforcing ownership."""
-    return get_entry(conn, entry_id, user_id, include_deleted=include_deleted)
+    """Retrieves an entry by its ID with full corrections and mistake history, enforcing ownership."""
+    return get_entry(conn, entry_id, user_id, include_deleted=include_deleted, include_history=True)
+
+
+@router.get("/{entry_id}/history", response_model=JournalEntryResponse)
+def get_entry_history(
+    entry_id: str,
+    user_id: str = Depends(get_authenticated_user_id),
+    conn: sqlite3.Connection = Depends(get_db_conn),
+) -> JournalEntryResponse:
+    """Retrieves the full revision and mistake correction history for a specific entry."""
+    return get_entry(conn, entry_id, user_id, include_deleted=False, include_history=True)
 
 
 @router.delete("/{entry_id}", response_model=EntryDeleteResponse)

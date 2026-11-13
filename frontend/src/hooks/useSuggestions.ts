@@ -8,6 +8,7 @@ export function useSuggestions(
 ) {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [activeSuggestions, setActiveSuggestions] = useState<ActiveSuggestion[]>([]);
+  const [reviewHistory, setReviewHistory] = useState<ActiveSuggestion[]>([]);
   const [isStale, setIsStale] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +43,7 @@ export function useSuggestions(
     // Initialize active suggestions mapping from immutable analysis
     const initialActive: ActiveSuggestion[] = incoming.suggestions.map((s) => ({
       ...s,
-      state: 'pending',
+      state: s.state || 'pending',
       activeRange: {
         start: s.edit.start,
         end: s.edit.end,
@@ -50,7 +51,9 @@ export function useSuggestions(
     }));
 
     setActiveSuggestions(initialActive);
-    setSelectedSuggestionId(initialActive[0]?.id || null);
+    setReviewHistory(initialActive);
+    const firstPending = initialActive.find((s) => s.state === 'pending');
+    setSelectedSuggestionId(firstPending ? firstPending.id : initialActive[0]?.id || null);
     return true;
   };
 
@@ -60,13 +63,15 @@ export function useSuggestions(
   const acceptSuggestion = (id: string) => {
     if (isStale) return;
 
-    const result = applySuggestion(entry.content, activeSuggestions, id);
+    const targetList = activeSuggestions.length > 0 ? activeSuggestions : reviewHistory;
+    const result = applySuggestion(entry.content, targetList, id);
     if (!result.success) {
       setError(result.error || 'Could not apply suggestion.');
       return;
     }
 
     setActiveSuggestions(result.updatedSuggestions);
+    setReviewHistory(result.updatedSuggestions);
     const nextPending = result.updatedSuggestions.find(
       (s) => s.state === 'pending' && s.id !== id
     );
@@ -80,10 +85,12 @@ export function useSuggestions(
    * Underline is removed, but text remains untouched.
    */
   const dismissSuggestion = (id: string) => {
-    const updated = activeSuggestions.map((s) =>
+    const targetList = activeSuggestions.length > 0 ? activeSuggestions : reviewHistory;
+    const updated = targetList.map((s) =>
       s.id === id ? { ...s, state: 'dismissed' as const } : s
     );
     setActiveSuggestions(updated);
+    setReviewHistory(updated);
     if (selectedSuggestionId === id) {
       const nextPending = updated.find(
         (s) => s.state === 'pending' && s.id !== id
@@ -97,10 +104,12 @@ export function useSuggestions(
    */
   const acceptAllSuggestions = () => {
     if (isStale) return;
-    const result = applyAllPendingSuggestions(entry.content, activeSuggestions);
+    const targetList = activeSuggestions.length > 0 ? activeSuggestions : reviewHistory;
+    const result = applyAllPendingSuggestions(entry.content, targetList);
     if (!result.success || result.appliedCount === 0) return;
 
     setActiveSuggestions(result.updatedSuggestions);
+    setReviewHistory(result.updatedSuggestions);
     setSelectedSuggestionId(null);
     onUpdateContent(result.newText, entry.revision + 1);
   };
@@ -109,10 +118,12 @@ export function useSuggestions(
    * Dismisses all pending suggestions.
    */
   const dismissAllSuggestions = () => {
-    const updated = activeSuggestions.map((s) =>
+    const targetList = activeSuggestions.length > 0 ? activeSuggestions : reviewHistory;
+    const updated = targetList.map((s) =>
       s.state === 'pending' ? { ...s, state: 'dismissed' as const } : s
     );
     setActiveSuggestions(updated);
+    setReviewHistory(updated);
     setSelectedSuggestionId(null);
   };
 
@@ -123,15 +134,32 @@ export function useSuggestions(
   const notifyManualEdit = () => {
     if (activeSuggestions.length > 0 && !isStale) {
       setIsStale(true);
-      // Clear active underlines visually
+      // Clear active underlines visually from the canvas
       setActiveSuggestions([]);
       setSelectedSuggestionId(null);
+      // reviewHistory remains intact so past reviews/mistakes are preserved
     }
+  };
+
+  const hydrateSuggestions = (
+    suggestions: ActiveSuggestion[],
+    incomingAnalysis?: Analysis | null
+  ) => {
+    if (incomingAnalysis) {
+      setAnalysis(incomingAnalysis);
+    }
+    setReviewHistory(suggestions);
+    setActiveSuggestions(suggestions);
+    setIsStale(false);
+    setError(null);
+    const firstPending = suggestions.find((s) => s.state === 'pending');
+    setSelectedSuggestionId(firstPending ? firstPending.id : suggestions[0]?.id || null);
   };
 
   const clearAnalysis = () => {
     setAnalysis(null);
     setActiveSuggestions([]);
+    setReviewHistory([]);
     setIsStale(false);
     setError(null);
     setSelectedSuggestionId(null);
@@ -140,6 +168,7 @@ export function useSuggestions(
   return {
     analysis,
     activeSuggestions,
+    reviewHistory,
     isStale,
     isLoading,
     error,
@@ -153,6 +182,7 @@ export function useSuggestions(
     acceptAllSuggestions,
     dismissAllSuggestions,
     notifyManualEdit,
+    hydrateSuggestions,
     clearAnalysis,
   };
 }
